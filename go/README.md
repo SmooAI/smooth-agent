@@ -1,10 +1,10 @@
-# smooth-agent — Go client
+# smooth-operator-agent — Go client
 
-An idiomatic, transport-agnostic Go client for the [smooth-agent](../docs/PROTOCOL.md)
+An idiomatic, transport-agnostic Go client for the [smooth-operator-agent](../docs/PROTOCOL.md)
 WebSocket protocol, generated from the JSON Schemas in [`../spec/`](../spec).
 
 ```bash
-go get github.com/SmooAI/smooth-agent/go/protocol
+go get github.com/SmooAI/smooth-operator-agent/go/protocol
 ```
 
 ## Usage
@@ -16,7 +16,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/SmooAI/smooth-agent/go/protocol"
+	"github.com/SmooAI/smooth-operator-agent/go/protocol"
 )
 
 func main() {

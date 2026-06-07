@@ -3,7 +3,7 @@
 
 using System.Text.Json;
 
-namespace SmooAI.SmoothAgent.Tests;
+namespace SmooAI.SmoothOperatorAgent.Tests;
 
 public sealed class ConformanceTests : IAsyncLifetime
 {

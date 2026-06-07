@@ -8,7 +8,7 @@
 using System.Net.WebSockets;
 using System.Text;
 
-namespace SmooAI.SmoothAgent;
+namespace SmooAI.SmoothOperatorAgent;
 
 public enum TransportState
 {

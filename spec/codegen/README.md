@@ -75,7 +75,7 @@ pip install datamodel-code-generator
 datamodel-codegen \
   --input spec/ \
   --input-file-type jsonschema \
-  --output python/smooth_agent/generated/ \
+  --output python/smooth_operator_agent/generated/ \
   --output-model-type pydantic_v2.BaseModel \
   --use-annotated \
   --use-field-description \
@@ -85,11 +85,11 @@ datamodel-codegen \
 datamodel-codegen \
   --input spec/domain/session.schema.json \
   --input-file-type jsonschema \
-  --output python/smooth_agent/generated/domain/session.py \
+  --output python/smooth_operator_agent/generated/domain/session.py \
   --output-model-type pydantic_v2.BaseModel
 ```
 
-Output: `python/smooth_agent/generated/` — Pydantic v2 model files with `model_config = ConfigDict(populate_by_name=True)`.
+Output: `python/smooth_operator_agent/generated/` — Pydantic v2 model files with `model_config = ConfigDict(populate_by_name=True)`.
 
 ## Rust — `typify` (schemars)
 
@@ -102,7 +102,7 @@ Output: `python/smooth_agent/generated/` — Pydantic v2 model files with `model
 # See: https://github.com/oxidecomputer/typify
 ```
 
-Output: `rust/smooth-agent-protocol/src/generated.rs` — `#[derive(Debug, Clone, Serialize, Deserialize)]` structs.
+Output: `rust/smooth-operator-agent-protocol/src/generated.rs` — `#[derive(Debug, Clone, Serialize, Deserialize)]` structs.
 
 ## Keeping generated code in sync
 
@@ -111,7 +111,7 @@ Add a CI step that runs the generator and checks for uncommitted changes:
 ```bash
 # In .github/workflows/codegen.yml:
 # 1. Run the generator for every language
-# 2. git diff --exit-code -- typescript/src/generated/ go/protocol/ dotnet/ python/smooth_agent/generated/ rust/smooth-agent-protocol/src/generated.rs
+# 2. git diff --exit-code -- typescript/src/generated/ go/protocol/ dotnet/ python/smooth_operator_agent/generated/ rust/smooth-operator-agent-protocol/src/generated.rs
 # If the diff is non-empty, the PR modified a schema without regenerating — fail the check.
 ```
 

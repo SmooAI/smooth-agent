@@ -12,7 +12,7 @@ using System.Runtime.Serialization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SmooAI.SmoothAgent.Generated;
+namespace SmooAI.SmoothOperatorAgent.Generated;
 
 public sealed class EnumMemberStringConverter<T> : JsonConverter<T> where T : struct, Enum
 {

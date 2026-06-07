@@ -1,6 +1,6 @@
 /**
- * @smooai/smooth-agent — TypeScript protocol types + native client for the
- * smooth-agent WebSocket protocol.
+ * @smooai/smooth-operator-agent — TypeScript protocol types + native client for the
+ * smooth-operator-agent WebSocket protocol.
  *
  * The protocol contract is defined by the language-neutral JSON Schemas in
  * `spec/`. The generated types (`./generated/types.ts`) are committed so consumers

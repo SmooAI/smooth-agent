@@ -18,7 +18,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SmooAI.SmoothAgent;
+namespace SmooAI.SmoothOperatorAgent;
 
 /// <summary>Every server→client event <c>type</c> discriminator value.</summary>
 public static class EventTypes

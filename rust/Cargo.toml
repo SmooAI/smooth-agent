@@ -1,17 +1,17 @@
 [workspace]
 resolver = "2"
-members = ["smooth-agent-core", "adapters/in-memory", "smooth-agent-server"]
+members = ["smooth-operator-agent-core", "adapters/in-memory", "smooth-operator-agent-server"]
 
 [workspace.package]
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/SmooAI/smooth-agent"
+repository = "https://github.com/SmooAI/smooth-operator-agent"
 
 [workspace.dependencies]
 # Reference core depends on the agent engine.
 # TODO: switch to crates.io once smooth-operator is published (roadmap Phase 0)
 smooai-smooth-operator = { path = "../../smooth-operator/rust/smooth-operator" }
-smooth-agent-core = { package = "smooai-smooth-agent-core", path = "smooth-agent-core" }
+smooth-operator-agent-core = { package = "smooai-smooth-operator-agent-core", path = "smooth-operator-agent-core" }
 
 async-trait = "0.1"
 anyhow = "1"

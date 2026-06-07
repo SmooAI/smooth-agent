@@ -1,12 +1,12 @@
 # Architecture
 
-smooth-agent is the **service layer** on top of [`smooth-operator`](https://github.com/SmooAI/smooth-operator) (the agent engine). This document describes how the pieces fit, what we borrowed from [Onyx](https://github.com/onyx-dot-app/onyx), and why the design is serverless-first.
+smooth-operator-agent is the **service layer** on top of [`smooth-operator`](https://github.com/SmooAI/smooth-operator) (the agent engine). This document describes how the pieces fit, what we borrowed from [Onyx](https://github.com/onyx-dot-app/onyx), and why the design is serverless-first.
 
 ## 1. The big picture
 
 ```
                     ┌──────────────────────────────────────────────┐
-   WebSocket /      │                  smooth-agent                 │
+   WebSocket /      │                  smooth-operator-agent                 │
    HTTP client  ───▶│                                              │
   (browser, app,    │  ┌───────────┐   ┌──────────────────────┐    │
    chat widget)     │  │ Protocol  │──▶│   Agent Runtime       │    │
@@ -40,9 +40,9 @@ The **only** thing a client ever sees is the [protocol](PROTOCOL.md). Everything
 
 The smooai monorepo today runs its agent on **LangGraph** (TypeScript) — a `StateGraph` with nodes `intake_bootstrap → guardrails → knowledge_search ↔ response_gen ↔ tool_execution → structure_response → escalation → analytics → memory_update`, checkpointed with `PostgresSaver`.
 
-smooth-agent **replaces LangGraph with smooth-operator**. The mapping is direct because smooth-operator already ships the analogous primitives:
+smooth-operator-agent **replaces LangGraph with smooth-operator**. The mapping is direct because smooth-operator already ships the analogous primitives:
 
-| LangGraph (smooai today) | smooth-operator (smooth-agent) |
+| LangGraph (smooai today) | smooth-operator (smooth-operator-agent) |
 | ------------------------ | ------------------------------ |
 | `StateGraph` / `Annotation.Root` | `Workflow<S>` / `WorkflowBuilder<S>` |
 | graph node | `Node<S>` (or `FnNode<S>`) |
@@ -52,7 +52,7 @@ smooth-agent **replaces LangGraph with smooth-operator**. The mapping is direct 
 | tool bound to model | `Tool` trait + `ToolRegistry` |
 | streaming `stream_chunk` events | `AgentEvent` stream (`Started`, `LlmRequest`, `ToolCallStart/Complete`, `TokenDelta`, `Completed`, `HumanInputRequired`, …) |
 | HITL write-confirmation / OTP pause | `human` module — `HumanRequest::Confirm`, `ConfirmationHook` (`ToolHook::pre_call`) |
-| Voyage embeddings + pgvector retrieval | `KnowledgeBase` trait (smooth-agent provides the real vector-backed impl; the crate ships an in-memory stub) |
+| Voyage embeddings + pgvector retrieval | `KnowledgeBase` trait (smooth-operator-agent provides the real vector-backed impl; the crate ships an in-memory stub) |
 
 The agent pipeline (the nine "nodes") is re-expressed as a smooth-operator `Workflow`. See [ROADMAP.md](ROADMAP.md) Phase 3.
 

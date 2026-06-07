@@ -1,6 +1,6 @@
 # Storage adapters
 
-smooth-agent never names a database in application or agent code. Everything goes through one **`StorageAdapter`** seam with two production implementations:
+smooth-operator-agent never names a database in application or agent code. Everything goes through one **`StorageAdapter`** seam with two production implementations:
 
 | | **Postgres** (k8s / self-host) | **DynamoDB** (AWS serverless) |
 | --- | --- | --- |

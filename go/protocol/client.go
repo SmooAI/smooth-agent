@@ -1,4 +1,4 @@
-// Package protocol is the Go client for the smooth-agent WebSocket protocol.
+// Package protocol is the Go client for the smooth-operator-agent WebSocket protocol.
 //
 // It mirrors the TypeScript reference implementation: a transport-agnostic Client
 // that correlates server events back to client actions by requestId, exposes the
@@ -18,7 +18,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Client is a transport-agnostic smooth-agent protocol client.
+// Client is a transport-agnostic smooth-operator-agent protocol client.
 //
 // It is safe for concurrent use. Construct it with New, call Connect, then issue
 // actions. A single read loop dispatches inbound frames to the waiting request,

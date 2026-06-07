@@ -1,6 +1,6 @@
 /**
  * SmoothAgentClient — a minimal, idiomatic, transport-agnostic client for the
- * smooth-agent WebSocket protocol.
+ * smooth-operator-agent WebSocket protocol.
  *
  * Design goals
  * ------------

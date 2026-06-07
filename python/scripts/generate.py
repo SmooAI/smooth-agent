@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Codegen: emit ``src/smooth_agent/_generated.py`` from the language-neutral
+"""Codegen: emit ``src/smooth_operator_agent/_generated.py`` from the language-neutral
 JSON Schemas in ``../spec`` using datamodel-code-generator (pydantic v2).
 
 Strategy
@@ -35,7 +35,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SPEC_DIR = HERE.parent.parent / "spec"
-OUT_FILE = HERE.parent / "src" / "smooth_agent" / "_generated.py"
+OUT_FILE = HERE.parent / "src" / "smooth_operator_agent" / "_generated.py"
 
 # Order matters only for readability of the merged doc; codegen sorts its output.
 SUBDIRS = ["", "actions", "events", "domain"]

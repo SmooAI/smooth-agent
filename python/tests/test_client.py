@@ -14,7 +14,7 @@ from collections.abc import Callable
 
 import pytest
 
-from smooth_agent import (
+from smooth_operator_agent import (
     ProtocolError,
     SmoothAgentClient,
     Transport,

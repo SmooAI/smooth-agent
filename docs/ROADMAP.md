@@ -1,12 +1,12 @@
 # Roadmap
 
-The phased plan for building smooth-agent and getting the smooai monorepo to dogfood it (replacing LangGraph). Phases are roughly sequential but several can overlap. Status legend: ✅ done · 🟡 in progress · ⬜ not started.
+The phased plan for building smooth-operator-agent and getting the smooai monorepo to dogfood it (replacing LangGraph). Phases are roughly sequential but several can overlap. Status legend: ✅ done · 🟡 in progress · ⬜ not started.
 
 ## Phase 0 — Foundations (the two repos)
 
-- ✅ Split: `smooth-operator` (engine) and `smooth-agent` (service), both public, MIT.
+- ✅ Split: `smooth-operator` (engine) and `smooth-operator-agent` (service), both public, MIT.
 - ✅ **Extract smooth-operator standalone** — carved the Rust crate out of the `smooth` monorepo into `SmooAI/smooth-operator`, detached from the workspace, internal couplings feature-gated (`bigsmooth`), secrets redacted. `cargo build` (default/bigsmooth/sqlite) + `cargo test --lib` (408) green.
-- ⬜ Publish `smooai-smooth-operator` to crates.io; tag `v0.13.x`. *(then smooth-agent switches its path dep to the published crate)*
+- ⬜ Publish `smooai-smooth-operator` to crates.io; tag `v0.13.x`. *(then smooth-operator-agent switches its path dep to the published crate)*
 - ⬜ Make the `smooth` monorepo consume the extracted crate as a dependency (the "fully extract" follow-through — touches ~20 dependent crates).
 
 ## Phase 1 — The protocol (`spec/`)
@@ -25,7 +25,7 @@ See [PROTOCOL.md](PROTOCOL.md).
 
 One trait, two backends. See [STORAGE.md](STORAGE.md).
 
-- ✅ Define the `StorageAdapter` trait surface (`rust/smooth-agent-core/src/adapter.rs`): conversations, participants, messages, sessions, + sync `checkpoints()`/`knowledge()` accessors so smooth-operator's `CheckpointStore`/`KnowledgeBase` plug in unchanged.
+- ✅ Define the `StorageAdapter` trait surface (`rust/smooth-operator-agent-core/src/adapter.rs`): conversations, participants, messages, sessions, + sync `checkpoints()`/`knowledge()` accessors so smooth-operator's `CheckpointStore`/`KnowledgeBase` plug in unchanged.
 - ✅ **In-memory adapter** (`rust/adapters/in-memory`) — the conformance baseline; delegates checkpoints/knowledge to smooth-operator's `MemoryCheckpointStore`/`InMemoryKnowledge`. Integration test green.
 - ⬜ **Postgres adapter** (k8s path): conversation/participant/message/session tables; Postgres checkpoint store (smooth-operator ships `PostgresCheckpointStore`); `pgvector` + `tsvector` knowledge with RRF + rerank. Mirror the smooai `knowledge_vectors` schema.
 - ⬜ **DynamoDB adapter** (AWS path): ElectroDB single-table for conversation/participant/message/session/checkpoint; **S3 Vectors** for knowledge embeddings.
@@ -35,7 +35,7 @@ One trait, two backends. See [STORAGE.md](STORAGE.md).
 
 ## Phase 3 — Agent runtime on smooth-operator (`rust/`, then bindings)
 
-- ✅ `KnowledgeChatRuntime` (`rust/smooth-agent-core/src/runtime.rs`) — runs a real smooth-operator `Agent::run` loop with `with_knowledge` auto-injection + a `knowledge_search` tool over the StorageAdapter. MockLlmClient-tested.
+- ✅ `KnowledgeChatRuntime` (`rust/smooth-operator-agent-core/src/runtime.rs`) — runs a real smooth-operator `Agent::run` loop with `with_knowledge` auto-injection + a `knowledge_search` tool over the StorageAdapter. MockLlmClient-tested.
 - ✅ **Real-LLM E2E** (`tests/e2e_llm_smoo_ai.rs`, gated on `SMOOTH_AGENT_E2E=1`+`SMOOAI_GATEWAY_KEY`) — live `claude-haiku-4-5` via llm.smoo.ai: plain completion (PONG), streaming deltas, and the headline — the model autonomously invokes `knowledge_search`, retrieves a seeded "17-day return window," and answers "17" (real tool-calling + RAG grounding). 4/4 live.
 - 🟡 **Per-session conversation memory** — the E2E surfaced that the runtime builds a fresh `Agent` (new id) per turn, so cross-turn memory misses. Being fixed in the WS service (stable per-session agent id + `with_prior_messages` replay).
 - ⬜ Re-express the smooai general-agent pipeline as a smooth-operator `Workflow`: nodes for intake, guardrails, knowledge_search, response_gen, tool_execution, structure_response, escalation, analytics, memory_update.
@@ -54,10 +54,10 @@ One trait, two backends. See [STORAGE.md](STORAGE.md).
 
 Every client is generated from `spec/` (protocol-first) and validates the shared conformance fixtures. Each has a transport-agnostic native client with `requestId` correlation, a streaming `MessageTurn` (awaitable terminal + iterate `stream_token`/`stream_chunk`), and HITL resume routing.
 
-- ✅ **TypeScript** (`@smooai/smooth-agent`) — Lambda-native; the dogfood target. 16 tests.
+- ✅ **TypeScript** (`@smooai/smooth-operator-agent`) — Lambda-native; the dogfood target. 16 tests.
 - ✅ **C#/.NET** (`SmooAI.SmoothAgent`, net8.0) — first-class. System.Text.Json polymorphic event union. 21 tests.
-- ✅ **Go** (`github.com/SmooAI/smooth-agent/go`) — `ServerEvent`+`Raw` accessor pattern. 26 tests (race-clean).
-- ✅ **Python** (`smooth_agent`) — pydantic v2 discriminated unions, async client. 26 tests.
+- ✅ **Go** (`github.com/SmooAI/smooth-operator-agent/go`) — `ServerEvent`+`Raw` accessor pattern. 26 tests (race-clean).
+- ✅ **Python** (`smooth_operator_agent`) — pydantic v2 discriminated unions, async client. 26 tests.
 - ⬜ Service hosts per language (WS server + agent runtime), and a runnable "hello knowledge-chat" example each.
 - ⬜ In-process FFI where it pays off: napi-rs (TS/Lambda), PyO3/uniffi (Python).
 - ⬜ **.NET ecosystem interop** (see [DOTNET.md](DOTNET.md)): a `SmoothAgentChatClient : IChatClient` facade over the remote client (Microsoft.Extensions.AI), `services.AddSmoothAgent(...)` DI, a `SmoothAgentThread` handle, `AIFunction`-based tool authoring, and middleware mapping to smooth-operator's `ToolHook`. Borrowed from Microsoft Agent Framework idioms.
@@ -66,13 +66,13 @@ Every client is generated from `spec/` (protocol-first) and validates the shared
 
 - ⬜ **SST** (`deploy/sst`): API Gateway WebSocket + Lambda handlers (`$connect`, `send_message`, …) + DynamoDB table + S3 Vectors + S3 blob bucket. One-command `deploy`.
 - ⬜ **Helm + ArgoCD** (`deploy/k8s`): service + Postgres + pgvector + ingress + ArgoCD Application. One-command `helm install`.
-- ⬜ `npx smooth-agent deploy` UX wrapper.
+- ⬜ `npx smooth-operator-agent deploy` UX wrapper.
 - ⬜ Extract the reusable pieces into a public **`SmooAI/deploy`** package (SST constructs + Helm/ArgoCD) once the first concrete deploy works; dogfood into smooai. See [DEPLOY.md](DEPLOY.md).
 
 ## Phase 7 — Dogfood in the smooai monorepo
 
-- ⬜ Replace `packages/backend/src/ai/graphs/**` (LangGraph) with smooth-agent's runtime on smooth-operator.
-- ⬜ Point the existing `@smooai/realtime` WebSocket handlers at the smooth-agent protocol.
+- ⬜ Replace `packages/backend/src/ai/graphs/**` (LangGraph) with smooth-operator-agent's runtime on smooth-operator.
+- ⬜ Point the existing `@smooai/realtime` WebSocket handlers at the smooth-operator-agent protocol.
 - ⬜ Keep Postgres/pgvector in smooai; verify retrieval parity (Voyage + hybrid + rerank).
 - ⬜ Cut over behind a flag; verify on a customer site.
 

@@ -7,13 +7,13 @@
 
 use chrono::Utc;
 
-use smooth_agent_adapter_memory::InMemoryStorageAdapter;
-use smooth_agent_core::adapter::{MessageQuery, SessionUpdate, StorageAdapter};
-use smooth_agent_core::domain::{
+use smooth_operator::{Checkpoint, Conversation as EngineConversation};
+use smooth_operator_agent_adapter_memory::InMemoryStorageAdapter;
+use smooth_operator_agent_core::adapter::{MessageQuery, SessionUpdate, StorageAdapter};
+use smooth_operator_agent_core::domain::{
     Conversation, Direction, Message, MessageContent, Participant, ParticipantType, Platform,
     Session, SessionStatus,
 };
-use smooth_operator::{Checkpoint, Conversation as EngineConversation};
 
 fn conversation(id: &str, org: &str) -> Conversation {
     Conversation {
@@ -100,7 +100,7 @@ async fn full_lifecycle_through_the_adapter() {
     let updated = store
         .update_conversation(
             "conv-1",
-            smooth_agent_core::adapter::ConversationUpdate {
+            smooth_operator_agent_core::adapter::ConversationUpdate {
                 name: Some("Renamed".into()),
                 ..Default::default()
             },

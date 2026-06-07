@@ -47,7 +47,7 @@
 #nullable enable
 #pragma warning disable // Disable all warnings in generated code
 
-namespace SmooAI.SmoothAgent.Generated
+namespace SmooAI.SmoothOperatorAgent.Generated
 {
     /// <summary>
     /// Fields sent by the client to approve or reject a pending tool write.
@@ -279,7 +279,7 @@ namespace SmooAI.SmoothAgent.Generated
         /// Message direction: `inbound` = from user, `outbound` = from agent.
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("direction")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothAgent.Generated.EnumMemberStringConverter<ConversationMessageDirection>))]
+        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothOperatorAgent.Generated.EnumMemberStringConverter<ConversationMessageDirection>))]
         public ConversationMessageDirection Direction { get; set; } = default!;
 
         /// <summary>
@@ -388,7 +388,7 @@ namespace SmooAI.SmoothAgent.Generated
         /// Current lifecycle status of the session.
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("status")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothAgent.Generated.EnumMemberStringConverter<GetSessionResponseStatus>))]
+        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothOperatorAgent.Generated.EnumMemberStringConverter<GetSessionResponseStatus>))]
         public GetSessionResponseStatus? Status { get; set; } = default!;
 
     }
@@ -536,7 +536,7 @@ namespace SmooAI.SmoothAgent.Generated
         /// The agent's assessment of where the conversation stands after this turn.
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("resolutionStatus")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothAgent.Generated.EnumMemberStringConverter<GeneralAgentResponseResolutionStatus>))]
+        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothOperatorAgent.Generated.EnumMemberStringConverter<GeneralAgentResponseResolutionStatus>))]
         public GeneralAgentResponseResolutionStatus ResolutionStatus { get; set; } = default!;
 
         /// <summary>
@@ -660,7 +660,7 @@ namespace SmooAI.SmoothAgent.Generated
         /// The channel on which this conversation takes place.
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("platform")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothAgent.Generated.EnumMemberStringConverter<ConversationPlatform>))]
+        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothOperatorAgent.Generated.EnumMemberStringConverter<ConversationPlatform>))]
         public ConversationPlatform Platform { get; set; } = default!;
 
         /// <summary>
@@ -742,7 +742,7 @@ namespace SmooAI.SmoothAgent.Generated
         /// Message direction relative to the platform: `inbound` = from user/external, `outbound` = from agent/platform.
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("direction")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothAgent.Generated.EnumMemberStringConverter<MessageDirection>))]
+        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothOperatorAgent.Generated.EnumMemberStringConverter<MessageDirection>))]
         public MessageDirection Direction { get; set; } = default!;
 
         /// <summary>
@@ -827,7 +827,7 @@ namespace SmooAI.SmoothAgent.Generated
         /// Content item type discriminator.
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("type")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothAgent.Generated.EnumMemberStringConverter<ContentItemType>))]
+        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothOperatorAgent.Generated.EnumMemberStringConverter<ContentItemType>))]
         public ContentItemType Type { get; set; } = default!;
 
         /// <summary>
@@ -867,7 +867,7 @@ namespace SmooAI.SmoothAgent.Generated
         /// Participant role: `user` = end-user, `ai-agent` = smooth-operator agent, `human-agent` = live support agent.
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("type")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothAgent.Generated.EnumMemberStringConverter<ParticipantType>))]
+        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothOperatorAgent.Generated.EnumMemberStringConverter<ParticipantType>))]
         public ParticipantType Type { get; set; } = default!;
 
         /// <summary>
@@ -991,7 +991,7 @@ namespace SmooAI.SmoothAgent.Generated
         /// Lifecycle status of the session.
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("status")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothAgent.Generated.EnumMemberStringConverter<SessionStatus>))]
+        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothOperatorAgent.Generated.EnumMemberStringConverter<SessionStatus>))]
         public SessionStatus? Status { get; set; } = default!;
 
         /// <summary>
@@ -1070,7 +1070,7 @@ namespace SmooAI.SmoothAgent.Generated
         /// The action to perform.
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("action")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothAgent.Generated.EnumMemberStringConverter<ActionEnvelopeAction>))]
+        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothOperatorAgent.Generated.EnumMemberStringConverter<ActionEnvelopeAction>))]
         public ActionEnvelopeAction Action { get; set; } = default!;
 
         /// <summary>
@@ -1101,7 +1101,7 @@ namespace SmooAI.SmoothAgent.Generated
         /// Identifies which event this frame carries.
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("type")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothAgent.Generated.EnumMemberStringConverter<EventEnvelopeType>))]
+        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothOperatorAgent.Generated.EnumMemberStringConverter<EventEnvelopeType>))]
         public EventEnvelopeType Type { get; set; } = default!;
 
         /// <summary>
@@ -2242,7 +2242,7 @@ namespace SmooAI.SmoothAgent.Generated
         /// Machine-readable failure reason. Absent if the server cannot determine a specific cause.
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("error")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothAgent.Generated.EnumMemberStringConverter<Data13Error>))]
+        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothOperatorAgent.Generated.EnumMemberStringConverter<Data13Error>))]
         public Data13Error? Error { get; set; } = default!;
 
         /// <summary>
@@ -2267,7 +2267,7 @@ namespace SmooAI.SmoothAgent.Generated
         /// The channel through which the OTP was delivered.
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("channel")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothAgent.Generated.EnumMemberStringConverter<Data14Channel>))]
+        [System.Text.Json.Serialization.JsonConverter(typeof(SmooAI.SmoothOperatorAgent.Generated.EnumMemberStringConverter<Data14Channel>))]
         public Data14Channel Channel { get; set; } = default!;
 
         /// <summary>
