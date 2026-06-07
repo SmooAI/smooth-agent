@@ -1,0 +1,16 @@
+{
+    "name": "@smooai/smooth-operator-agent-deploy-sst",
+    "version": "0.1.0",
+    "private": true,
+    "description": "SST v4 app — AWS-serverless deploy path for smooth-operator-agent (API Gateway WebSocket + Rust Lambda + DynamoDB + S3 Vectors).",
+    "type": "module",
+    "scripts": {
+        "typecheck": "tsc --noEmit",
+        "sst": "sst"
+    },
+    "devDependencies": {
+        "@types/node": "22.10.5",
+        "sst": "4.13.0",
+        "typescript": "5.7.3"
+    }
+}

@@ -6,6 +6,7 @@ members = [
     "adapters/postgres",
     "adapters/dynamodb",
     "smooth-operator-agent-server",
+    "smooth-operator-agent-lambda",
 ]
 
 [workspace.package]
