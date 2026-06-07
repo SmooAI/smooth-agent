@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["smooth-agent-core", "adapters/in-memory"]
+members = ["smooth-agent-core", "adapters/in-memory", "smooth-agent-server"]
 
 [workspace.package]
 edition = "2021"
