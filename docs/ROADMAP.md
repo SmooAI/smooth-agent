@@ -35,7 +35,9 @@ One trait, two backends. See [STORAGE.md](STORAGE.md).
 
 ## Phase 3 — Agent runtime on smooth-operator (`rust/`, then bindings)
 
-- 🟡 `AgentRuntime` skeleton (`rust/smooth-agent-core/src/runtime.rs`) — constructs a real smooth-operator `Agent` + `Workflow`, `with_storage()` wires the adapter's knowledge/checkpoint accessors. *(proof-of-consumption done; real pipeline next)*
+- ✅ `KnowledgeChatRuntime` (`rust/smooth-agent-core/src/runtime.rs`) — runs a real smooth-operator `Agent::run` loop with `with_knowledge` auto-injection + a `knowledge_search` tool over the StorageAdapter. MockLlmClient-tested.
+- ✅ **Real-LLM E2E** (`tests/e2e_llm_smoo_ai.rs`, gated on `SMOOTH_AGENT_E2E=1`+`SMOOAI_GATEWAY_KEY`) — live `claude-haiku-4-5` via llm.smoo.ai: plain completion (PONG), streaming deltas, and the headline — the model autonomously invokes `knowledge_search`, retrieves a seeded "17-day return window," and answers "17" (real tool-calling + RAG grounding). 4/4 live.
+- 🟡 **Per-session conversation memory** — the E2E surfaced that the runtime builds a fresh `Agent` (new id) per turn, so cross-turn memory misses. Being fixed in the WS service (stable per-session agent id + `with_prior_messages` replay).
 - ⬜ Re-express the smooai general-agent pipeline as a smooth-operator `Workflow`: nodes for intake, guardrails, knowledge_search, response_gen, tool_execution, structure_response, escalation, analytics, memory_update.
 - ⬜ Wire the real `KnowledgeBase` impl (vector-backed) into the workflow, replacing the in-memory stub.
 - ⬜ HITL: write-confirmation + OTP via the `human` module / `ConfirmationHook`, surfaced as protocol events.
