@@ -1,0 +1,38 @@
+apiVersion: v2
+name: smooth-operator-agent
+description: |
+  WebSocket reference service for smooth-operator-agent — speaks the
+  schema-driven protocol over a smooth-operator KnowledgeChatRuntime, backed by
+  a pgvector Postgres in the Kubernetes / self-host deploy path.
+type: application
+# Chart version — bump on chart changes.
+version: 0.1.0
+# Tracks the smooai-smooth-operator-agent-server crate version.
+appVersion: "0.1.0"
+home: https://github.com/SmooAI/smooth-operator-agent
+sources:
+  - https://github.com/SmooAI/smooth-operator-agent
+keywords:
+  - smooth-operator
+  - websocket
+  - agent
+  - pgvector
+maintainers:
+  - name: SmooAI
+    url: https://github.com/SmooAI
+# NOTE: Postgres (with the pgvector extension) is an EXTERNAL dependency in this
+# chart — `postgres.external: true` in values.yaml. We do NOT vendor a Postgres
+# subchart, because pgvector requires a pgvector-enabled image
+# (e.g. pgvector/pgvector:pg16 or CloudNativePG with the extension) and the
+# OLTP + checkpoint tables expect a long-lived, backed-up database rather than
+# an ephemeral in-cluster pod. See deploy/k8s/README.md for the pgvector
+# requirement and how to point `database.urlSecretRef` at it. If you want a
+# throwaway in-cluster pgvector for dev, add it as a dependency here, e.g.:
+#
+#   dependencies:
+#     - name: postgresql
+#       version: "15.x.x"
+#       repository: https://charts.bitnami.com/bitnami
+#       condition: postgres.embedded.enabled
+#
+# and set the image to a pgvector build via postgresql.image.* values.

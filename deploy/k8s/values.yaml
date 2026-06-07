@@ -1,0 +1,156 @@
+# Default values for the smooth-operator-agent chart.
+# All overridable per-environment via `helm install -f my-values.yaml` or
+# ArgoCD `helm.valuesObject` (see deploy/k8s/argocd/application.yaml).
+
+replicaCount: 2
+
+image:
+  # Image build is cross-repo (see Dockerfile header + deploy/k8s/README.md).
+  # Point this at your registry once the image is built + pushed.
+  repository: ghcr.io/smooai/smooth-operator-agent
+  # Prefer an immutable tag/digest in prod. ArgoCD Image Updater can manage this.
+  tag: ""        # defaults to .Chart.AppVersion when empty
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # When true, a ServiceAccount is created. When false, an existing one is used.
+  create: true
+  # Annotations to add (e.g. IRSA role ARN for AWS-backed S3 / IAM).
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10001
+  capabilities:
+    drop:
+      - ALL
+
+# ── Server runtime config (maps to the env-var contract in rust/.../config.rs)
+# Non-secret values go into a ConfigMap; secrets go into the templated Secret
+# (or an external secret you reference). See `gateway.keySecretRef` and
+# `database`.
+server:
+  # SMOOTH_AGENT_PORT — TCP port the server binds. NOTE: the server currently
+  # binds 127.0.0.1; for k8s it must bind 0.0.0.0 (see README "0.0.0.0 bind
+  # follow-up"). The Service/probes target this port regardless.
+  port: 8787
+  # SMOOTH_AGENT_MODEL — model id requested from the gateway.
+  model: "claude-haiku-4-5"
+  # SMOOTH_AGENT_SEED_KB — "1" seeds a couple of demo docs on startup.
+  seedKb: false
+  # SMOOTH_AGENT_MAX_ITERATIONS — agent-loop iteration cap per turn.
+  maxIterations: 6
+  # SMOOTH_AGENT_MAX_TOKENS — max_tokens sent to the gateway.
+  maxTokens: 512
+  # RUST_LOG — tracing filter. Falls back to "info,smooth_operator_agent_server=info".
+  rustLog: "info,smooth_operator_agent_server=info"
+  # Extra raw env vars (list of {name, value}) merged into the container.
+  extraEnv: []
+
+gateway:
+  # SMOOAI_GATEWAY_URL — OpenAI-compatible LLM gateway base URL.
+  url: "https://llm.smoo.ai/v1"
+  # SMOOAI_GATEWAY_KEY (secret). One of the two below:
+  #   - inline `key`: value is written into the chart-managed Secret (use only
+  #     for local/dev; prefer an external secret in prod).
+  #   - `keySecretRef`: reference an EXISTING secret (e.g. managed by
+  #     external-secrets-operator). Takes precedence over `key` when set.
+  key: ""
+  keySecretRef:
+    name: ""          # existing Secret name
+    key: "SMOOAI_GATEWAY_KEY"
+
+database:
+  # The Postgres adapter reads SMOOTH_AGENT_DATABASE_URL (preferred) or
+  # DATABASE_URL. Postgres MUST have the pgvector extension available
+  # (pgvector/pgvector:pg16, CloudNativePG + pgvector, RDS with pgvector, etc.).
+  # See README "pgvector requirement".
+  #
+  # One of:
+  #   - inline `url`: written into the chart-managed Secret (dev only).
+  #   - `urlSecretRef`: reference an EXISTING secret (recommended for prod).
+  url: ""
+  urlSecretRef:
+    name: ""          # existing Secret name
+    key: "DATABASE_URL"
+
+# External Postgres expected (no in-cluster Postgres pod is created by this
+# chart). Set false only if you add a Postgres subchart dependency (see
+# Chart.yaml note).
+postgres:
+  external: true
+
+service:
+  type: ClusterIP
+  port: 80
+  # targetPort defaults to server.port.
+
+ingress:
+  enabled: false
+  className: ""
+  # WebSocket-friendly annotations. Defaults cover nginx; for AWS ALB swap to
+  # the alb.ingress.kubernetes.io/* set noted in the README.
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/websocket-services: ""   # filled with the svc name at render time if blank
+  host: smooth-operator-agent.example.com
+  path: /ws
+  pathType: Prefix
+  tls:
+    enabled: false
+    # secretName for the TLS cert. With cert-manager, also add the issuer
+    # annotation under ingress.annotations.
+    secretName: smooth-operator-agent-tls
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+livenessProbe:
+  tcpSocket:
+    port: ws
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+readinessProbe:
+  tcpSocket:
+    port: ws
+  initialDelaySeconds: 3
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

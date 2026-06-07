@@ -1,0 +1,41 @@
+smooth-operator-agent has been deployed.
+
+Release:   {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+Image:     {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+Replicas:  {{ if .Values.autoscaling.enabled }}{{ .Values.autoscaling.minReplicas }}–{{ .Values.autoscaling.maxReplicas }} (HPA){{ else }}{{ .Values.replicaCount }}{{ end }}
+
+WebSocket endpoint: /ws  (port {{ .Values.server.port }} in-container, service port {{ .Values.service.port }})
+
+{{- if .Values.ingress.enabled }}
+
+Reachable via Ingress at:
+  ws{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}{{ .Values.ingress.path }}
+{{- else }}
+
+Ingress is disabled. Port-forward to test locally:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "smooth-operator-agent.fullname" . }} 8787:{{ .Values.service.port }}
+  # then connect a WS client to ws://127.0.0.1:8787/ws
+{{- end }}
+
+Config / secrets:
+{{- if or .Values.gateway.key .Values.gateway.keySecretRef.name }}
+  - SMOOAI_GATEWAY_KEY: wired ({{ if .Values.gateway.keySecretRef.name }}external secret {{ .Values.gateway.keySecretRef.name }}{{ else }}chart-managed secret{{ end }}). LLM turns enabled.
+{{- else }}
+  - SMOOAI_GATEWAY_KEY: NOT set. The server binds and answers protocol-only
+    actions (ping, create_conversation_session), but send_message returns a
+    clean error. Set gateway.key or gateway.keySecretRef to enable LLM turns.
+{{- end }}
+{{- if or .Values.database.url .Values.database.urlSecretRef.name }}
+  - DATABASE_URL: wired ({{ if .Values.database.urlSecretRef.name }}external secret {{ .Values.database.urlSecretRef.name }}{{ else }}chart-managed secret{{ end }}).
+    Postgres MUST have the pgvector extension available.
+{{- else }}
+  - DATABASE_URL: NOT set. The pgvector-backed Postgres adapter will fail to
+    connect. Set database.url or database.urlSecretRef, pointing at a
+    pgvector-enabled Postgres (pgvector/pgvector:pg16, CloudNativePG + pgvector,
+    or RDS with the pgvector extension).
+{{- end }}
+
+REMINDER (0.0.0.0 bind follow-up): the server currently binds 127.0.0.1 in
+rust/smooth-operator-agent-server/src/server.rs. Until that one-liner ships,
+in-cluster Service/Ingress traffic CANNOT reach the pod. See deploy/k8s/README.md.

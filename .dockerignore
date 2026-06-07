@@ -1,0 +1,49 @@
+# Build artifacts — never ship into the image context.
+target/
+**/target/
+**/*.rs.bk
+
+# Node / TypeScript
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+*.tsbuildinfo
+.turbo/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+.venv/
+**/.venv/
+.mypy_cache/
+.ruff_cache/
+
+# .NET
+**/bin/
+**/obj/
+
+# Go
+go/bin/
+
+# SST / deploy state
+.sst/
+.open-next/
+cdk.out/
+
+# Env / secrets — must never enter the build context
+.env
+.env.local
+*.pem
+
+# VCS / OS / editor
+.git/
+**/.git/
+.DS_Store
+.idea/
+.vscode/
+
+# Docs / language dirs not needed to build the Rust server.
+# (Kept conservative: the cross-repo build only needs rust/ from each repo,
+# but we leave docs/spec in case future build steps reference them.)

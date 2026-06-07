@@ -1,0 +1,74 @@
+# ArgoCD Application for the smooth-operator-agent Helm chart.
+#
+# Mirrors the smooai api-prime / ArgoCD pattern (cdk8s ArgoCDHelmApplication):
+# automated sync (prune + selfHeal), CreateNamespace, a sync-wave annotation,
+# and a retry/backoff. Apply this manifest into the ArgoCD namespace
+# (`kubectl apply -n argocd -f deploy/k8s/argocd/application.yaml`) or let your
+# app-of-apps reference it.
+#
+# Image-tag wiring: pin via the `image.tag` value below, or let ArgoCD Image
+# Updater manage it (add the standard
+# `argocd-image-updater.argoproj.io/*` annotations once a registry tag policy
+# is chosen — matching smooai's api-prime setup).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: smooth-operator-agent
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/SmooAI/smooth-operator-agent
+    targetRevision: main
+    path: deploy/k8s
+    helm:
+      releaseName: smooth-operator-agent
+      # Per-environment overrides. Secrets should come from an external secret
+      # (gateway.keySecretRef / database.urlSecretRef) rather than inline here.
+      valuesObject:
+        replicaCount: 2
+        image:
+          repository: ghcr.io/smooai/smooth-operator-agent
+          tag: ""          # pin an immutable tag/digest in prod
+        gateway:
+          url: https://llm.smoo.ai/v1
+          model: claude-haiku-4-5
+          keySecretRef:
+            name: smooth-operator-agent-gateway
+            key: SMOOAI_GATEWAY_KEY
+        database:
+          # External pgvector-enabled Postgres. The referenced secret must
+          # carry the connection string under this key.
+          urlSecretRef:
+            name: smooth-operator-agent-db
+            key: DATABASE_URL
+        postgres:
+          external: true
+        ingress:
+          enabled: true
+          className: nginx
+          host: smooth-operator-agent.smoo.ai
+          path: /ws
+          tls:
+            enabled: true
+            secretName: smooth-operator-agent-tls
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: smooai-smooth-operator-agent
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
