@@ -66,6 +66,10 @@ Alternatives considered:
 
 Sparse/keyword on the AWS path: start with an inverted-index-in-DynamoDB for small corpora; graduate to OpenSearch Serverless when users need real BM25 at scale. RRF fuses whichever dense + sparse arms are configured.
 
+## Document-level access control
+
+Org isolation (`organizationId`) is the coarse tenant boundary the knowledge slice already enforces. The **within-org, per-user/group** layer (Onyx-gap G3) sits on top in our own code via `AclKnowledgeStore`, which wraps any backend's `KnowledgeBase`, records each document's `DocAcl` at ingest, and filters query results by the requester's `AccessContext` at read (over-fetch-then-filter). It's backend-agnostic — the post-filter is identical for in-memory, Postgres, and DynamoDB. No-ACL documents default to org-public, so existing seeded knowledge stays retrievable. See [ACCESS-CONTROL.md](ACCESS-CONTROL.md).
+
 ## Conformance
 
 Both adapters implement the same trait and pass the same conformance suite (CRUD + checkpoint round-trip + retrieval relevance fixtures), so "works on Postgres" and "works on DynamoDB" are CI-verified, not aspirational.

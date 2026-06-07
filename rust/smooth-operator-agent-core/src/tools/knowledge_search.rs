@@ -19,6 +19,8 @@ use async_trait::async_trait;
 use smooth_operator::tool::ToolSchema;
 use smooth_operator::{KnowledgeBase, Tool};
 
+use crate::access_control::{AccessContext, AclKnowledgeStore};
+
 /// Default number of results returned when the caller doesn't specify `limit`.
 const DEFAULT_LIMIT: usize = 3;
 
@@ -33,9 +35,26 @@ pub struct KnowledgeSearchTool {
 
 impl KnowledgeSearchTool {
     /// Build the tool over a knowledge base handle.
+    ///
+    /// The handle may itself be an ACL-filtering reader (e.g. from
+    /// [`AclKnowledgeStore::reader`](crate::access_control::AclKnowledgeStore::reader)),
+    /// in which case the tool's searches are document-level access-controlled.
+    /// Use [`with_access_control`](Self::with_access_control) to build that
+    /// reader from a store + requester in one step.
     #[must_use]
     pub fn new(knowledge: Arc<dyn KnowledgeBase>) -> Self {
         Self { knowledge }
+    }
+
+    /// Build the tool bound to a requester's [`AccessContext`] over an
+    /// [`AclKnowledgeStore`] (Onyx-gap G3): every search reads through an
+    /// ACL-filtering reader, so results the requester is not entitled to are
+    /// dropped before they reach the model.
+    #[must_use]
+    pub fn with_access_control(store: &AclKnowledgeStore, context: AccessContext) -> Self {
+        Self {
+            knowledge: store.reader(context),
+        }
     }
 }
 

@@ -26,6 +26,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Context, Result};
 
 use smooth_operator::{Document, DocumentType, KnowledgeBase};
+use smooth_operator_agent_core::access_control::DocAcl;
 
 use crate::chunker::{Chunk, Chunker};
 use crate::connector::{Connector, Timestamp};
@@ -271,9 +272,19 @@ fn store_chunk(
     for (k, v) in &chunk.metadata {
         document = document.with_metadata(k.clone(), v.clone());
     }
-    // Carry ACL labels as a metadata field for a future ACL-filtered retrieval.
+    // Carry ACL labels for ACL-filtered retrieval (Onyx-gap G3).
+    //
+    // The legacy comma-joined "acl" field is kept for human/debug visibility.
+    // The structured `DocAcl` (under `DocAcl::ACL_METADATA_KEY`) is what an
+    // `AclKnowledgeStore` records and enforces at read: the connector's ACL
+    // labels are interpreted as *group* entitlements (the common connector
+    // permission shape — a document is readable by members of those groups).
+    // An empty/absent ACL leaves the document org-public (backward-compatible).
     if let Some(acl) = &chunk.acl {
-        document = document.with_metadata("acl", acl.join(","));
+        if !acl.is_empty() {
+            document = document.with_metadata("acl", acl.join(","));
+            document = DocAcl::for_groups(acl.clone()).attach_to(document);
+        }
     }
 
     knowledge

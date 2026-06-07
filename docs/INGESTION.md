@@ -94,7 +94,7 @@ pub trait Connector: Send + Sync {
 | `title`    | optional human title (folded into chunk metadata)                   |
 | `content`  | textual content (HTML already stripped for the web case)            |
 | `metadata` | arbitrary source metadata, propagated onto every chunk              |
-| `acl`      | optional access-control labels, carried through for future G3 filter |
+| `acl`      | optional access-control labels — stamped into the doc's `acl_v2` `DocAcl` (as group entitlements) and enforced at read; see [ACCESS-CONTROL.md](ACCESS-CONTROL.md) |
 
 Return a **stable `id`** for the same logical document so re-ingests can skip
 unchanged content.
@@ -143,7 +143,8 @@ Strategy:
 `overlap_chars` is clamped below `max_chars` so chunking always makes forward
 progress. Each `Chunk` gets a **stable id** `"{doc_id}#{index}"` and inherits the
 source document's title, metadata (`title`, `source`, plus any custom keys), and
-`acl`.
+`acl`. The `acl` labels become a `DocAcl` (under the `acl_v2` metadata key) that
+ACL-filtered retrieval enforces at read — see [ACCESS-CONTROL.md](ACCESS-CONTROL.md).
 
 ## The embedder seam
 

@@ -15,6 +15,7 @@ use smooth_operator::{
     ToolRegistry, Workflow, WorkflowBuilder,
 };
 
+use crate::access_control::{AccessContext, AclKnowledgeStore};
 use crate::adapter::{MessageQuery, StorageAdapter};
 use crate::domain::{Direction, Message as DomainMessage, MessageContent};
 use crate::telemetry::{
@@ -243,6 +244,23 @@ pub struct KnowledgeChatRuntime {
     /// its `Agent` with this provider instead of a live client.
     llm_provider: Option<Arc<dyn LlmProvider>>,
     max_iterations: u32,
+    /// Document-level access control (Onyx-gap G3). When set, the runtime wraps
+    /// the storage adapter's [`KnowledgeBase`](smooth_operator::KnowledgeBase) in
+    /// the given [`AclKnowledgeStore`] and reads through a per-turn
+    /// [`AccessContext`]-bound reader, so retrieval (both the auto-injected
+    /// context and the `knowledge_search` tool) only surfaces documents the
+    /// requester is entitled to. `None` ⇒ no document-level filtering (org
+    /// isolation upstream is unaffected); the raw `storage.knowledge()` is used.
+    access: Option<RuntimeAccessControl>,
+}
+
+/// The runtime's bound access-control state: the ACL-aware knowledge store
+/// (shared, owns the ACL side table populated at ingest) plus the requester
+/// identity to filter reads by.
+#[derive(Clone)]
+struct RuntimeAccessControl {
+    store: AclKnowledgeStore,
+    context: AccessContext,
 }
 
 impl KnowledgeChatRuntime {
@@ -254,6 +272,36 @@ impl KnowledgeChatRuntime {
             llm,
             llm_provider: None,
             max_iterations: 8,
+            access: None,
+        }
+    }
+
+    /// Enable document-level access control for this runtime (Onyx-gap G3).
+    ///
+    /// `store` is an [`AclKnowledgeStore`] that wraps the same inner
+    /// [`KnowledgeBase`](smooth_operator::KnowledgeBase) the documents were
+    /// ingested through (so its ACL side table is populated), and `context` is
+    /// the requester's identity. With this set, every turn reads knowledge
+    /// through an [`AccessContext`]-bound reader — both the auto-injected
+    /// `[Relevant knowledge]` context and the `knowledge_search` tool drop
+    /// documents the requester is not entitled to.
+    ///
+    /// Without it, the runtime reads the raw `storage.knowledge()` exactly as
+    /// before (backward-compatible — existing no-ACL knowledge stays
+    /// retrievable).
+    #[must_use]
+    pub fn with_access_control(mut self, store: AclKnowledgeStore, context: AccessContext) -> Self {
+        self.access = Some(RuntimeAccessControl { store, context });
+        self
+    }
+
+    /// The knowledge handle a turn reads through: an ACL-filtering reader bound
+    /// to the requester when access control is enabled, otherwise the raw
+    /// storage-adapter knowledge base (unfiltered, org-scoping only).
+    fn read_knowledge(&self) -> Arc<dyn smooth_operator::KnowledgeBase> {
+        match &self.access {
+            Some(ac) => ac.store.reader(ac.context.clone()),
+            None => self.storage.knowledge(),
         }
     }
 
@@ -287,6 +335,13 @@ impl KnowledgeChatRuntime {
     /// checkpoint-resume path can't be keyed stably — replaying the persisted
     /// log is the robust, backend-agnostic way to carry memory.
     fn build_agent(&self, events: Arc<Mutex<Vec<AgentEvent>>>, prior: Vec<EngineMessage>) -> Agent {
+        // The knowledge handle both retrieval paths read through. When access
+        // control is enabled this is an ACL-filtering reader bound to the
+        // requester's `AccessContext` (Onyx-gap G3); otherwise it's the raw
+        // org-scoped knowledge base. Built once so both paths hit the SAME store
+        // and the SAME ACL filter.
+        let knowledge = self.read_knowledge();
+
         // (1) Auto-injected knowledge context: the engine queries the KB with
         //     the user's message and prepends matches before the first call.
         let config = AgentConfig::new(
@@ -295,15 +350,16 @@ impl KnowledgeChatRuntime {
             self.llm.clone(),
         )
         .with_max_iterations(self.max_iterations)
-        .with_knowledge(self.storage.knowledge())
+        .with_knowledge(Arc::clone(&knowledge))
         // (1b) Cross-turn memory: replay the conversation's prior turns so the
         //      model sees turn 1 when answering turn 2.
         .with_prior_messages(prior);
 
         // (2) Agent-driven search: register the knowledge_search tool over the
-        //     SAME knowledge handle, so a tool call hits the same store.
+        //     SAME knowledge handle, so a tool call hits the same store and the
+        //     same ACL filter.
         let mut tools = ToolRegistry::new();
-        tools.register(KnowledgeSearchTool::new(self.storage.knowledge()));
+        tools.register(KnowledgeSearchTool::new(knowledge));
 
         let agent = Agent::new(config, tools)
             .with_checkpoint_store(self.storage.checkpoints())

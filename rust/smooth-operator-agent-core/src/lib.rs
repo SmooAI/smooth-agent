@@ -13,12 +13,14 @@
 //!   smooth-operator [`Agent`](smooth_operator::Agent) and
 //!   [`Workflow`](smooth_operator::Workflow), proving consumption.
 
+pub mod access_control;
 pub mod adapter;
 pub mod domain;
 pub mod runtime;
 pub mod telemetry;
 pub mod tools;
 
+pub use access_control::{AccessContext, AclKnowledgeStore, DocAcl};
 pub use adapter::{ConversationUpdate, MessagePage, MessageQuery, SessionUpdate, StorageAdapter};
 pub use domain::{
     Checkpoint, ContentItem, Conversation, Direction, Message, MessageContent, Participant,
