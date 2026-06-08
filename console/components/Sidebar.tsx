@@ -16,6 +16,7 @@ interface NavItem {
 const NAV: NavItem[] = [
     { href: '/', label: 'Dashboard', icon: '▣' },
     { href: '/conversations', label: 'Conversations', icon: '💬' },
+    { href: '/connectors', label: 'Connectors', icon: '🔌', curatorOnly: true },
     { href: '/indexing', label: 'Indexing', icon: '⟳', curatorOnly: true },
     { href: '/document-sets', label: 'Document Sets', icon: '🗂' },
     { href: '/settings', label: 'Settings', icon: '⚙' },

@@ -10,24 +10,28 @@ auth-gated [`/admin/*` API](../docs/ADMIN-API.md) — whoami, chat history,
 indexing status, and document sets — with org-scoping and RBAC inherited from the
 backend.
 
-It is a **pure read client** of the admin API. Every page is a server component
-that constructs a typed [`AdminClient`](./lib/admin-client.ts) bound to the
-signed-in user's bearer token and renders the JSON. Write operations (connector
-config, settings CRUD) land in increment 3 once the admin API grows write
-endpoints.
+Every page is a server component that constructs a typed
+[`AdminClient`](./lib/admin-client.ts) bound to the signed-in user's bearer token
+and renders the JSON. **Read** surfaces (dashboard, conversations, indexing,
+document sets) plus the **write** surfaces (connector add/edit/delete + "Index
+now", and an editable agent-settings form — Phase 12 increment 4) are all backed
+by the [`/admin/*` write API](../docs/ADMIN-API.md). Mutations run through Next.js
+server actions and inherit the backend's RBAC: viewing is Curator+, "Index now" is
+Curator+, and creating/editing/deleting connectors + saving settings is **Admin**
+(the UI hides the controls a role can't use; the server re-enforces every gate).
 
 ```mermaid
 flowchart LR
     User[Operator / Curator / Admin] -->|browser| Console
     subgraph Console["Next.js console (sst.aws.Nextjs → Lambda)"]
       Login["/login + /api/auth/*"]
-      Pages["server components<br/>(/, /conversations, /indexing,<br/>/document-sets, /settings)"]
+      Pages["server components + actions<br/>(/, /conversations, /indexing,<br/>/document-sets, /connectors, /settings)"]
       Client["lib/admin-client.ts<br/>(typed fetch + Bearer)"]
     end
     Login -->|OpenAuth code flow| Issuer[(OpenAuth issuer<br/>SST Auth / Smoo identity)]
     Issuer -->|JWT sub/org/role| Login
     Pages --> Client
-    Client -->|GET /admin/* + Bearer JWT| Admin["smooth-operator-server<br/>axum: /admin/* + /ws"]
+    Client -->|GET/POST/PUT/DELETE /admin/* + Bearer JWT| Admin["smooth-operator-server<br/>axum: /admin/* + /ws"]
     Admin -->|verify JWT, org-scope, RBAC| Storage[(StorageAdapter /<br/>IndexingStore / doc-set registry)]
 ```
 
@@ -98,10 +102,43 @@ The signed-in role (`admin` ≥ `curator` ≥ `basic`) drives the UI:
 | `/conversations/[id]` | Conversation detail — the message transcript (`/admin/conversations/{id}/messages`). |
 | `/indexing` | Indexing runs table (Curator+) — status, counts, cursor, started/finished. |
 | `/document-sets` | Document set cards — names + document counts (Curator+). |
-| `/settings` | Read-only config (model, gateway, auth mode, backend health). CRUD = increment 3. |
+| `/connectors` | Connectors list (Curator+ to view): name / kind / source / enabled / updated. Per-row **Index now** (Curator+) surfaces the returned run's status + counts inline and links to `/indexing`; **Edit** / **Delete** (Admin, delete behind a confirm). Admin sees a **+ New connector** button. |
+| `/connectors/new` | Add-connector form (Admin) — pick `kind`, then kind-specific fields. |
+| `/connectors/[id]/edit` | Edit-connector form (Admin) — prefilled from the stored config (`kind` is immutable on edit). |
+| `/settings` | **Editable** agent settings (model, system-prompt textarea, default-tools list) — Admin saves via `PUT /admin/settings`, Curator views read-only — plus a read-only block of backend health + deploy config. |
 | `/login`, `/api/auth/*` | Auth: dev login server action; OpenAuth login/callback/signout route handlers. |
 
-Every data page handles loading / empty / error states explicitly.
+Every data page handles loading / empty / error states explicitly. Validation
+`400`s from the write API (the protocol `VALIDATION_ERROR` shape) surface inline
+on the relevant form.
+
+### Connector config + the `auth_ref` secret model
+
+A connector's `config` is a kind-specific, free-form payload:
+
+| `kind` | required | optional |
+| --- | --- | --- |
+| `github` | `owner`, `repo` | `include` (`{prose, code, issues}` toggles), `ref`, `visibility` (`public`/`private`), `auth_ref` |
+| `web` | `url` | — |
+| `file` | `path` | — |
+
+**`auth_ref` is a secret NAME** (e.g. `GITHUB_TOKEN`), **never the token itself**.
+The connector form collects it as a name only; the backend resolves it from
+env / `@smooai/config` at index time, uses it to build the live connector, and
+discards it — it is never persisted in the config store nor returned by any
+`GET`. A private GitHub repo requires an `auth_ref`; a public repo may index
+unauthenticated.
+
+### "Index now"
+
+`POST /admin/connectors/{id}/index` (Curator+) builds the live connector from its
+stored config and runs **one** indexing pass with the network-free default
+chunker/embedder, returning the resulting `IndexingRun`. The list page's "Index
+now" button surfaces that run's status + `documents seen` / `chunks indexed`
+inline and links to the full `/indexing` table (the run is recorded in the shared
+indexing store, so it shows there too). For a `file` / public `web` connector this
+is fully offline; for a private repo an unresolvable `auth_ref` returns a clean
+`400` (surfaced inline) before any network call.
 
 ---
 
@@ -117,17 +154,36 @@ without re-parsing the body. The domain shapes (`Conversation`, `Message`,
 `ContentItem`, `ParticipantRef`) match the published `@smooai/smooth-operator`
 client so the two can be unified later.
 
+**Read** methods: `me`, `conversations`, `conversationMessages`, `indexingRuns`,
+`documentSets`, `listConnectors`, `getConnector`, `getSettings`. **Write** methods
+(increment 4): `createConnector`, `updateConnector`, `deleteConnector`,
+`indexConnector` (→ `IndexingRun`), `putSettings`. The write responses are
+unwrapped from their `{ connector }` / `{ run }` / `{ settings }` envelopes; the
+client surfaces the same `AdminApiError` so a `400 VALIDATION_ERROR` reaches the
+form. The mutating calls are invoked from server actions
+([`app/(app)/connectors/actions.ts`](./app/(app)/connectors/actions.ts),
+[`app/(app)/settings/actions.ts`](./app/(app)/settings/actions.ts)) that
+`revalidatePath` the affected pages.
+
 ---
 
 ## Tests
 
-A live Playwright smoke test ([`e2e/console.smoke.spec.ts`](./e2e/console.smoke.spec.ts)),
-gated on `SMOOTH_AGENT_E2E=1` like the repo's other live tests. It boots the
-`smooth-operator-server` (`AUTH_MODE=none`, `SMOOTH_AGENT_SEED_KB=1`, port 8840),
-`next start`s the console (`CONSOLE_AUTH=dev`) against it, signs in via the dev
-login, and asserts the dashboard renders the Admin principal + the seeded
-`policies` document set. It skips cleanly without the env and never prints
-secrets.
+Live Playwright smoke tests ([`e2e/console.smoke.spec.ts`](./e2e/console.smoke.spec.ts)),
+gated on `SMOOTH_AGENT_E2E=1` like the repo's other live tests. They boot a
+`smooth-operator-server` (`AUTH_MODE=none`) and `next start` the console
+(`CONSOLE_AUTH=dev`) against it, signing in via the dev login.
+
+- **Read smoke** (port 8840 / console 3939, `SMOOTH_AGENT_SEED_KB=1`): the
+  dashboard renders the Admin principal and the seeded `policies` document set.
+- **Write-flow smoke** (port 8841 / console 3940): drives the Admin UI through
+  **create** a connector via the form → it appears in the list → **edit** (rename)
+  → persists on re-fetch → **Index now** on a `file` connector pointing at a temp
+  dir the test creates (fully offline, no network/gateway) → a `succeeded` run
+  surfaces inline and in `/indexing` → **edit settings** (change the model) → Save
+  → re-fetch reflects it → **delete** the connector → it's gone.
+
+Both skip cleanly without the env and never print secrets.
 
 ```bash
 pnpm build                       # next build (required — the test next-starts the build)
@@ -162,9 +218,10 @@ The reusable wiring could later move into a `Console` construct in
 
 ---
 
-## Increment 3 (next)
+## Next
 
-- Connector configuration (add / edit / trigger re-index).
-- Settings write (model / gateway / auth) — needs new admin **write** endpoints.
-- Document-set management (rename / delete / re-tag).
+- Document-set management (rename / delete / re-tag) — needs admin endpoints.
+- Persistent connector-config + settings stores (the backend ships in-memory
+  stores; the Postgres/DynamoDB follow-ups are tracked in
+  [`docs/ADMIN-API.md`](../docs/ADMIN-API.md)).
 - Wire the real `sst.aws.Auth` issuer Lambda + the `SmoothAgentApi` URL output.

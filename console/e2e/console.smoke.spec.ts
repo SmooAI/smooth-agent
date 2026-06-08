@@ -17,6 +17,8 @@
 import { test, expect } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -142,5 +144,125 @@ test.describe('console smoke (live)', () => {
         await expect(page.getByRole('heading', { name: 'Document Sets' })).toBeVisible();
         // The seeded server tags its demo docs into the `policies` document set.
         await expect(page.getByText('policies')).toBeVisible();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Write-flow smoke (Phase 12 increment 4): connector CRUD + "Index now" +
+// editable settings, driven through the Admin UI against a second AUTH_MODE=none
+// server (port 8841) so it never collides with the read-smoke server (8840).
+// The file connector points at a temp dir we create, so indexing is fully
+// offline (no network / gateway). Skips cleanly without SMOOTH_AGENT_E2E=1.
+// ---------------------------------------------------------------------------
+
+const WRITE_ADMIN_PORT = 8841;
+const WRITE_CONSOLE_PORT = 3940;
+const WRITE_ADMIN_URL = `http://127.0.0.1:${WRITE_ADMIN_PORT}`;
+const WRITE_CONSOLE_URL = `http://127.0.0.1:${WRITE_CONSOLE_PORT}`;
+
+let writeServerProc: ChildProcess | undefined;
+let writeConsoleProc: ChildProcess | undefined;
+let tmpDir: string | undefined;
+
+test.describe('console write-flow smoke (live)', () => {
+    test.skip(!E2E, 'set SMOOTH_AGENT_E2E=1 to run the live console write-flow smoke test');
+
+    test.beforeAll(async () => {
+        // A temp dir with one small doc for the file connector to index offline.
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smooth-console-e2e-'));
+        fs.writeFileSync(path.join(tmpDir, 'note.txt'), 'Smooth Operator console write-flow test document.\nA second line of content.');
+
+        writeServerProc = spawn(SERVER_BIN, [], {
+            env: { ...process.env, AUTH_MODE: 'none', SMOOTH_AGENT_PORT: String(WRITE_ADMIN_PORT) },
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        writeServerProc.stderr?.on('data', (d) => process.stdout.write(`[wserver] ${d}`));
+        await waitForHealth(`${WRITE_ADMIN_URL}/admin/health`, 30_000);
+
+        writeConsoleProc = spawn('node_modules/.bin/next', ['start', '-p', String(WRITE_CONSOLE_PORT)], {
+            cwd: CONSOLE_DIR,
+            env: {
+                ...process.env,
+                CONSOLE_AUTH: 'dev',
+                ADMIN_API_URL: WRITE_ADMIN_URL,
+                BACKEND_AUTH_MODE: 'none',
+                PORT: String(WRITE_CONSOLE_PORT),
+            },
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        writeConsoleProc.stdout?.on('data', (d) => process.stdout.write(`[wconsole] ${d}`));
+        writeConsoleProc.stderr?.on('data', (d) => process.stdout.write(`[wconsole] ${d}`));
+        await waitForPort(WRITE_CONSOLE_PORT, 30_000);
+    });
+
+    test.afterAll(async () => {
+        for (const proc of [writeConsoleProc, writeServerProc]) {
+            if (proc && !proc.killed) {
+                proc.kill('SIGTERM');
+                await Promise.race([once(proc, 'exit'), new Promise((r) => setTimeout(r, 3000))]);
+            }
+        }
+        if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    async function signIn(page: import('@playwright/test').Page) {
+        await page.goto(`${WRITE_CONSOLE_URL}/login`);
+        await page.getByRole('button', { name: 'Continue as Admin' }).click();
+        await page.waitForURL(`${WRITE_CONSOLE_URL}/`);
+    }
+
+    test('create → edit → index(file) → settings → delete', async ({ page }) => {
+        page.on('console', (msg) => console.log(`[browser] ${msg.text()}`));
+        await signIn(page);
+
+        // (a) Create a file connector via the form → it appears in the list.
+        await page.goto(`${WRITE_CONSOLE_URL}/connectors/new`);
+        await expect(page.getByRole('heading', { name: 'New connector' })).toBeVisible();
+        await page.getByTestId('connector-name').fill('e2e-file');
+        await page.getByTestId('connector-kind').selectOption('file');
+        await page.getByTestId('connector-path').fill(tmpDir!);
+        await page.getByRole('button', { name: 'Create connector' }).click();
+
+        // Redirected to the list; the new row is present.
+        await page.waitForURL(`${WRITE_CONSOLE_URL}/connectors`);
+        const row = page.getByTestId('connector-row').filter({ hasText: 'e2e-file' });
+        await expect(row).toBeVisible();
+        await expect(row).toContainText('file');
+
+        // (b) Edit it → change the name → it persists (re-fetched on the list).
+        await row.getByRole('link', { name: 'Edit' }).click();
+        await page.waitForURL(/\/connectors\/.+\/edit/);
+        await page.getByTestId('connector-name').fill('e2e-file-renamed');
+        await page.getByRole('button', { name: 'Save changes' }).click();
+        await page.waitForURL(`${WRITE_CONSOLE_URL}/connectors`);
+        const renamed = page.getByTestId('connector-row').filter({ hasText: 'e2e-file-renamed' });
+        await expect(renamed).toBeVisible();
+
+        // (c) "Index now" on the file connector → a Succeeded run surfaces inline.
+        await renamed.getByTestId('index-now').click();
+        const result = renamed.getByTestId('index-result');
+        await expect(result).toBeVisible({ timeout: 15_000 });
+        await expect(result).toContainText('succeeded');
+        // The same run is visible in the /indexing table.
+        await page.goto(`${WRITE_CONSOLE_URL}/indexing`);
+        await expect(page.getByText('e2e-file-renamed')).toBeVisible();
+        await expect(page.getByText('succeeded').first()).toBeVisible();
+
+        // (d) Edit settings (change the model) → Save → re-fetch reflects it.
+        await page.goto(`${WRITE_CONSOLE_URL}/settings`);
+        await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+        const newModel = `e2e-model-${Date.now()}`;
+        await page.getByTestId('settings-model').fill(newModel);
+        await page.getByTestId('save-settings').click();
+        await expect(page.getByText('Settings saved.')).toBeVisible();
+        // Re-fetch the page; the saved model is prefilled.
+        await page.goto(`${WRITE_CONSOLE_URL}/settings`);
+        await expect(page.getByTestId('settings-model')).toHaveValue(newModel);
+
+        // (e) Delete the connector → it's gone from the list.
+        await page.goto(`${WRITE_CONSOLE_URL}/connectors`);
+        page.on('dialog', (d) => d.accept()); // accept the confirm()
+        await page.getByTestId('connector-row').filter({ hasText: 'e2e-file-renamed' }).getByTestId('delete-connector').click();
+        await expect(page.getByTestId('connector-row').filter({ hasText: 'e2e-file-renamed' })).toHaveCount(0, { timeout: 15_000 });
     });
 });

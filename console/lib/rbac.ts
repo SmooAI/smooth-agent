@@ -14,3 +14,12 @@ export function hasRole(role: Role | undefined, min: Role): boolean {
 export function canCurate(role: Role | undefined): boolean {
     return hasRole(role, 'curator');
 }
+
+/**
+ * Admin-only mutations: create/edit/delete connectors and save settings. The
+ * server enforces this too (`RequireRole<2>`); the UI hides/disables the controls
+ * so a Curator never sees an action it can't perform.
+ */
+export function canManage(role: Role | undefined): boolean {
+    return hasRole(role, 'admin');
+}

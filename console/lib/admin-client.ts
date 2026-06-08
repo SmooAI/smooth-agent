@@ -13,12 +13,18 @@
  */
 
 import type {
+    AgentSettings,
+    ConnectorConfig,
+    ConnectorsResponse,
+    ConnectorWrite,
     ConversationMessagesResponse,
     ConversationsResponse,
     DocumentSetsResponse,
+    IndexingRun,
     IndexingRunsResponse,
     AdminErrorBody,
     Principal,
+    SettingsWrite,
 } from './types';
 
 /** A typed error carrying the admin API's status + protocol error code. */
@@ -66,9 +72,23 @@ export class AdminClient {
         this.fetchImpl = opts.fetchImpl ?? fetch;
     }
 
-    private async get<T>(path: string): Promise<T> {
+    /**
+     * Issue an authenticated request and parse the JSON body. A non-2xx surfaces
+     * as a typed {@link AdminApiError} carrying the protocol error code/message.
+     * `parse: false` skips JSON parsing for empty-body responses (e.g. `204`).
+     */
+    private async request<T>(
+        method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+        path: string,
+        opts: { body?: unknown; parse?: boolean } = {},
+    ): Promise<T> {
+        const headers: Record<string, string> = { Authorization: `Bearer ${this.token}` };
+        if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+
         const res = await this.fetchImpl(`${this.baseUrl}${path}`, {
-            headers: { Authorization: `Bearer ${this.token}` },
+            method,
+            headers,
+            body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
             // Always hit the live admin API — never cache a stale management read.
             cache: 'no-store',
         });
@@ -87,7 +107,12 @@ export class AdminClient {
             throw new AdminApiError(res.status, code, message);
         }
 
+        if (opts.parse === false) return undefined as T;
         return (await res.json()) as T;
+    }
+
+    private get<T>(path: string): Promise<T> {
+        return this.request<T>('GET', path);
     }
 
     /** `GET /admin/health` — liveness (no auth required). */
@@ -126,5 +151,55 @@ export class AdminClient {
     /** `GET /admin/document-sets` — document set names + counts (Curator+). */
     documentSets(): Promise<DocumentSetsResponse> {
         return this.get<DocumentSetsResponse>('/admin/document-sets');
+    }
+
+    // --- Connector config (Phase 12, increment 3 write API) -----------------
+
+    /** `GET /admin/connectors` — list this org's connector configs (Curator+). */
+    listConnectors(): Promise<ConnectorsResponse> {
+        return this.get<ConnectorsResponse>('/admin/connectors');
+    }
+
+    /** `GET /admin/connectors/{id}` — one connector (Curator+; 404 cross-org/unknown). */
+    async getConnector(id: string): Promise<ConnectorConfig> {
+        const res = await this.get<{ connector: ConnectorConfig }>(`/admin/connectors/${encodeURIComponent(id)}`);
+        return res.connector;
+    }
+
+    /** `POST /admin/connectors` — create a connector (Admin). 400 on validation error. */
+    async createConnector(body: ConnectorWrite): Promise<ConnectorConfig> {
+        const res = await this.request<{ connector: ConnectorConfig }>('POST', '/admin/connectors', { body });
+        return res.connector;
+    }
+
+    /** `PUT /admin/connectors/{id}` — update a connector (Admin). 400 on validation error. */
+    async updateConnector(id: string, body: ConnectorWrite): Promise<ConnectorConfig> {
+        const res = await this.request<{ connector: ConnectorConfig }>('PUT', `/admin/connectors/${encodeURIComponent(id)}`, { body });
+        return res.connector;
+    }
+
+    /** `DELETE /admin/connectors/{id}` — delete a connector (Admin; 204 / 404). */
+    deleteConnector(id: string): Promise<void> {
+        return this.request<void>('DELETE', `/admin/connectors/${encodeURIComponent(id)}`, { parse: false });
+    }
+
+    /** `POST /admin/connectors/{id}/index` — build + run one indexing pass (Curator+). */
+    async indexConnector(id: string): Promise<IndexingRun> {
+        const res = await this.request<{ run: IndexingRun }>('POST', `/admin/connectors/${encodeURIComponent(id)}/index`, { body: {} });
+        return res.run;
+    }
+
+    // --- Agent settings -----------------------------------------------------
+
+    /** `GET /admin/settings` — the org's agent settings (defaults if unset; Curator+). */
+    async getSettings(): Promise<AgentSettings> {
+        const res = await this.get<{ settings: AgentSettings }>('/admin/settings');
+        return res.settings;
+    }
+
+    /** `PUT /admin/settings` — replace the org's agent settings (Admin). */
+    async putSettings(body: SettingsWrite): Promise<AgentSettings> {
+        const res = await this.request<{ settings: AgentSettings }>('PUT', '/admin/settings', { body });
+        return res.settings;
     }
 }

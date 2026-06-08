@@ -109,6 +109,61 @@ export interface DocumentSetsResponse {
     documentSets: DocumentSetRow[];
 }
 
+/** The kind of source a connector pulls from. */
+export type ConnectorKind = 'github' | 'web' | 'file';
+
+/**
+ * A persisted, org-scoped connector config — `GET /admin/connectors[/{id}]`.
+ *
+ * `config` is the kind-specific, free-form payload (`domain::ConnectorConfig.config`):
+ * - `github` → `{ owner, repo, include?: { prose, code, issues }, ref?, visibility?, auth_ref? }`
+ * - `web` → `{ url }`
+ * - `file` → `{ path }`
+ *
+ * **`auth_ref` is a secret NAME** (e.g. `"GITHUB_TOKEN"`), never the token — the
+ * backend resolves it from env at index time and never persists/returns a value.
+ *
+ * Note: the admin API's connector response omits `orgId` (it is implicit in the
+ * caller's principal); only the settings response echoes `orgId`.
+ */
+export interface ConnectorConfig {
+    id: string;
+    name: string;
+    kind: ConnectorKind;
+    config: Record<string, unknown>;
+    enabled: boolean;
+    createdAt: string; // ISO-8601
+    updatedAt: string; // ISO-8601
+}
+
+/** The wire body for `POST`/`PUT` of a connector. */
+export interface ConnectorWrite {
+    name: string;
+    kind: ConnectorKind;
+    config: Record<string, unknown>;
+    enabled: boolean;
+}
+
+export interface ConnectorsResponse {
+    connectors: ConnectorConfig[];
+}
+
+/** Per-org agent settings — `GET`/`PUT /admin/settings`. */
+export interface AgentSettings {
+    orgId: string;
+    model: string;
+    systemPrompt: string;
+    defaultTools: string[];
+    updatedAt: string; // ISO-8601
+}
+
+/** The wire body for `PUT /admin/settings`. */
+export interface SettingsWrite {
+    model: string;
+    systemPrompt: string;
+    defaultTools: string[];
+}
+
 /** The protocol error envelope returned on auth/handler failures. */
 export interface AdminErrorBody {
     error?: { code: string; message: string };
