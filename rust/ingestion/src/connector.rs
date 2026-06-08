@@ -2,7 +2,7 @@
 //!
 //! A connector pulls documents from an external source (a file tree, a web
 //! page, a SaaS API) into a normalized [`RawDocument`] the ingestion pipeline
-//! can chunk, embed, and store. This is the smooth-operator-agent analog of
+//! can chunk, embed, and store. This is the smooth-operator analog of
 //! Onyx's 58+ connectors (Onyx-gap G1): one trait, a credential-free
 //! [`MockConnector`] for the contract test, and real connectors (file/web)
 //! whose live paths are gated behind an external-dependency flag (G9).

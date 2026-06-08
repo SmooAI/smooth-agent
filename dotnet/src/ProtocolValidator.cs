@@ -19,7 +19,7 @@ using System.Text.Json;
 using NJsonSchema;
 using NJsonSchema.Validation;
 
-namespace SmooAI.SmoothOperatorAgent;
+namespace SmooAI.SmoothOperator;
 
 /// <summary>Result of a schema validation: validity plus any errors.</summary>
 public sealed class ValidationResult

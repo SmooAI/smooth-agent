@@ -1,7 +1,7 @@
 // Live LLM WebSocket E2E — gated on `SMOOTH_AGENT_E2E=1` + `SMOOAI_GATEWAY_KEY`.
 //
 // This is a REAL end-to-end test: it boots the actual Rust WS service
-// (smooth-operator-agent-server) as a child process with a seeded knowledge base
+// (smooth-operator-server) as a child process with a seeded knowledge base
 // and a real gateway key, then drives a full streaming turn through the real
 // SmoothAgentClient over a real ClientWebSocket (WebSocketTransport) and asserts:
 //
@@ -33,7 +33,7 @@ using System.Net.Sockets;
 using System.Text.Json;
 using Xunit.Abstractions;
 
-namespace SmooAI.SmoothOperatorAgent.Tests;
+namespace SmooAI.SmoothOperator.Tests;
 
 public sealed class LiveE2ETests
 {
@@ -46,7 +46,7 @@ public sealed class LiveE2ETests
     private static readonly string ServerBinary =
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".cargo", "shared-target", "debug", "smooth-operator-agent-server");
+            ".cargo", "shared-target", "debug", "smooth-operator-server");
 
     // Generous per-turn budget: the live gateway + tool loop can be slow.
     private static readonly TimeSpan TurnTimeout = TimeSpan.FromSeconds(120);
@@ -70,7 +70,7 @@ public sealed class LiveE2ETests
 
         Skip.IfNot(
             File.Exists(ServerBinary),
-            $"server binary not built at {ServerBinary} — run `cargo build -p smooai-smooth-operator-agent-server --bin smooth-operator-agent-server`.");
+            $"server binary not built at {ServerBinary} — run `cargo build -p smooai-smooth-operator-server --bin smooth-operator-server`.");
 
         // ── Boot the real Rust service as a child process. ──
         await using var server = await ServerProcess.StartAsync(ServerBinary, Port, Model, gatewayKey!, _out);
@@ -177,7 +177,7 @@ public sealed class LiveE2ETests
 }
 
 /// <summary>
-/// Spawns the smooth-operator-agent-server child process with the live config,
+/// Spawns the smooth-operator-server child process with the live config,
 /// waits until its TCP port accepts connections, and kills it on disposal.
 /// The gateway key is passed only via the child's environment — never logged.
 /// </summary>

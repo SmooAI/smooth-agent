@@ -12,7 +12,7 @@
 //!   with cursor paging, session status/counts.
 //! - **Checkpoints**: [`DynamoCheckpointStore`] — smooth-operator ships no
 //!   DynamoDB checkpoint store, so this crate provides one (sync
-//!   [`CheckpointStore`](smooth_operator::CheckpointStore) bridged over the async
+//!   [`CheckpointStore`](smooth_operator_core::CheckpointStore) bridged over the async
 //!   SDK; see [`checkpoint`]).
 //! - **Knowledge**: [`DynamoKnowledgeBase`] — brute-force cosine over DynamoDB
 //!   by default (testable, no extra services), or Amazon S3 Vectors behind the
@@ -52,11 +52,11 @@ use aws_sdk_dynamodb::Client;
 use chrono::Utc;
 use tokio::runtime::Handle;
 
-use smooth_operator::{CheckpointStore, KnowledgeBase};
-use smooth_operator_agent_core::adapter::{
+use smooth_operator::adapter::{
     ConversationUpdate, MessagePage, MessageQuery, SessionUpdate, StorageAdapter,
 };
-use smooth_operator_agent_core::domain::{Conversation, Message, Participant, Session};
+use smooth_operator::domain::{Conversation, Message, Participant, Session};
+use smooth_operator_core::{CheckpointStore, KnowledgeBase};
 
 pub use checkpoint::{DynamoCheckpointStore, MAX_INLINE_BLOB};
 pub use knowledge::{DynamoKnowledgeBase, KnowledgeBackend};
@@ -65,7 +65,7 @@ pub use s3vectors::{S3VectorsConfig, S3VectorsStore};
 // The shared embedding seam (trait + deterministic default + cosine helper)
 // lives in core; re-export so existing `dynamodb::{Embedder, …}` consumers keep
 // working.
-pub use smooth_operator_agent_core::embedding::{
+pub use smooth_operator::embedding::{
     DeterministicEmbedder, Embedder, InputType, DEFAULT_EMBEDDING_DIM,
 };
 
@@ -73,7 +73,7 @@ use checkpoint::aws_err;
 use keys::{attr, GSI1};
 
 /// Default table name when none is configured.
-pub const DEFAULT_TABLE_NAME: &str = "smooth-operator-agent";
+pub const DEFAULT_TABLE_NAME: &str = "smooth-operator";
 
 /// DynamoDB single-table storage adapter.
 pub struct DynamoDbAdapter {

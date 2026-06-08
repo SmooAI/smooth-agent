@@ -1,4 +1,4 @@
-"""Live end-to-end test: boots the real Rust ``smooth-operator-agent-server`` and
+"""Live end-to-end test: boots the real Rust ``smooth-operator-server`` and
 drives real LLM turns through it over a real WebSocket using the production async
 :class:`SmoothAgentClient` + :class:`WebSocketTransport`.
 
@@ -40,7 +40,7 @@ from pathlib import Path
 
 import pytest
 
-from smooth_operator_agent import (
+from smooth_operator import (
     EventualResponse,
     SmoothAgentClient,
     WebSocketTransport,
@@ -65,13 +65,13 @@ _MODEL = "claude-haiku-4-5"
 # The server echoes the supplied agentId back in its create-session response, and
 # the wire schema types agentId as a UUID — so the "e2e" agent is identified by a
 # stable, deterministic UUID derived from the label "e2e" (same id every run).
-_AGENT_ID = str(uuid.uuid5(uuid.NAMESPACE_DNS, "smooth-operator-agent.e2e"))
+_AGENT_ID = str(uuid.uuid5(uuid.NAMESPACE_DNS, "smooth-operator.e2e"))
 
 # Candidate locations for the compiled server binary.
 _BINARY_CANDIDATES = [
-    Path.home() / ".cargo" / "shared-target" / "debug" / "smooth-operator-agent-server",
+    Path.home() / ".cargo" / "shared-target" / "debug" / "smooth-operator-server",
     # In-tree fallback if a local target/ build was produced instead.
-    Path(__file__).resolve().parents[2] / "rust" / "target" / "debug" / "smooth-operator-agent-server",
+    Path(__file__).resolve().parents[2] / "rust" / "target" / "debug" / "smooth-operator-server",
 ]
 
 
@@ -80,9 +80,9 @@ def _resolve_binary() -> Path:
         if candidate.is_file():
             return candidate
     pytest.fail(
-        "smooth-operator-agent-server binary not found. Build it with:\n"
-        "  cargo build -p smooai-smooth-operator-agent-server "
-        "--bin smooth-operator-agent-server\n"
+        "smooth-operator-server binary not found. Build it with:\n"
+        "  cargo build -p smooai-smooth-operator-server "
+        "--bin smooth-operator-server\n"
         f"(searched: {', '.join(str(p) for p in _BINARY_CANDIDATES)})"
     )
 

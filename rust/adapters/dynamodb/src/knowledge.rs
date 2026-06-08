@@ -27,9 +27,9 @@ use aws_sdk_dynamodb::types::AttributeValue;
 use aws_sdk_dynamodb::Client;
 use tokio::runtime::Handle;
 
-use smooth_operator::{Document, KnowledgeBase, KnowledgeResult};
+use smooth_operator_core::{Document, KnowledgeBase, KnowledgeResult};
 
-use smooth_operator_agent_core::embedding::{cosine_similarity, Embedder, InputType};
+use smooth_operator::embedding::{cosine_similarity, Embedder, InputType};
 
 use crate::checkpoint::aws_err;
 use crate::keys::{self, attr};

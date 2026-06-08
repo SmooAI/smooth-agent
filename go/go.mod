@@ -1,4 +1,4 @@
-module github.com/SmooAI/smooth-operator-agent/go
+module github.com/SmooAI/smooth-operator/go
 
 go 1.26
 

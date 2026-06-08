@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# kind-smoke.sh — ephemeral-cluster deployment smoke test for smooth-operator-agent.
+# kind-smoke.sh — ephemeral-cluster deployment smoke test for smooth-operator.
 #
 # Stands up the Helm chart (deploy/k8s) on a kind cluster, backed by a throwaway
 # pgvector Postgres, then drives the wire protocol over a *real* WebSocket to the
@@ -17,9 +17,9 @@
 #  CROSS-REPO BUILD CONTEXT
 # ──────────────────────────────────────────────────────────────────────────
 # The image build spans TWO repos: the Rust workspace path-deps on the sibling
-# `smooth-operator` repo, so the Docker context must be the PARENT dir that holds
+# `smooth-operator-core` repo, so the Docker context must be the PARENT dir that holds
 # BOTH repos, with -f pointing at this repo's Dockerfile. See the Dockerfile
-# header and deploy/k8s/README.md. Once `smooai-smooth-operator` ships to
+# header and deploy/k8s/README.md. Once `smooai-smooth-operator-core` ships to
 # crates.io (roadmap Phase 0) the path-dep — and this cross-repo context — go
 # away, and PARENT_DIR can collapse to this repo's root.
 #
@@ -33,7 +33,7 @@
 #
 # Environment overrides (all optional):
 #   CLUSTER_NAME           kind cluster name                 (default: smooth-agent-smoke)
-#   IMAGE                  image tag built + loaded          (default: smooth-operator-agent:smoke)
+#   IMAGE                  image tag built + loaded          (default: smooth-operator:smoke)
 #   NAMESPACE              k8s namespace                     (default: smooth-agent-smoke)
 #   RELEASE                helm release name                 (default: smooth-agent)
 #   LOCAL_PORT             host port for the port-forward    (default: 18787)
@@ -54,15 +54,15 @@ CHART_DIR="${REPO_ROOT}/deploy/k8s"
 
 # ── Tunables ────────────────────────────────────────────────────────────────
 CLUSTER_NAME="${CLUSTER_NAME:-smooth-agent-smoke}"
-IMAGE="${IMAGE:-smooth-operator-agent:smoke}"
+IMAGE="${IMAGE:-smooth-operator:smoke}"
 NAMESPACE="${NAMESPACE:-smooth-agent-smoke}"
 RELEASE="${RELEASE:-smooth-agent}"
 LOCAL_PORT="${LOCAL_PORT:-18787}"
 # The cross-repo Docker context: the parent dir that holds BOTH this repo and the
-# sibling `smooth-operator` repo. Defaults to this repo's parent (the standard
+# sibling `smooth-operator-core` repo. Defaults to this repo's parent (the standard
 # ~/dev/smooai layout). Override PARENT_DIR for non-standard checkouts.
 PARENT_DIR="${PARENT_DIR:-$(cd "${REPO_ROOT}/.." && pwd)}"
-SIBLING_DIR="${PARENT_DIR}/smooth-operator"
+SIBLING_DIR="${PARENT_DIR}/smooth-operator-core"
 DOCKERFILE="${REPO_ROOT}/Dockerfile"
 
 # Throwaway pgvector Postgres deployed into the cluster.
@@ -92,8 +92,8 @@ cleanup() {
     if [[ "${code}" -ne 0 ]]; then
         warn "Run failed (exit ${code}) — dumping pod state for debugging"
         kubectl -n "${NAMESPACE}" get pods 2>/dev/null
-        kubectl -n "${NAMESPACE}" describe pods -l "app.kubernetes.io/name=smooth-operator-agent" 2>/dev/null | tail -40
-        kubectl -n "${NAMESPACE}" logs -l "app.kubernetes.io/name=smooth-operator-agent" --tail=80 2>/dev/null
+        kubectl -n "${NAMESPACE}" describe pods -l "app.kubernetes.io/name=smooth-operator" 2>/dev/null | tail -40
+        kubectl -n "${NAMESPACE}" logs -l "app.kubernetes.io/name=smooth-operator" --tail=80 2>/dev/null
     fi
     if [[ "${USE_EXISTING_CLUSTER:-0}" == "1" ]]; then
         # Don't delete a cluster we didn't create; just drop our namespace.

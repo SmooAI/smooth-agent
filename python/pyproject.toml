@@ -1,7 +1,7 @@
 [project]
-name = "smooth-operator-agent"
+name = "smooth-operator"
 version = "0.1.0"
-description = "Python protocol types and native async WebSocket client for the smooth-operator-agent protocol. Generated from the language-neutral JSON Schemas in spec/."
+description = "Python protocol types and native async WebSocket client for the smooth-operator protocol. Generated from the language-neutral JSON Schemas in spec/."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
@@ -34,7 +34,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/smooth_operator_agent"]
+packages = ["src/smooth_operator"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -49,4 +49,4 @@ target-version = "py311"
 extend-select = ["I"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/smooth_operator_agent/_generated.py" = ["E501", "F401", "N", "UP"]
+"src/smooth_operator/_generated.py" = ["E501", "F401", "N", "UP"]

@@ -1,0 +1,36 @@
+[package]
+name = "smooai-smooth-operator-server"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Reference WebSocket service for smooth-operator — speaks the schema-driven protocol over a smooth-operator KnowledgeChatRuntime."
+
+[lib]
+name = "smooth_operator_server"
+
+[[bin]]
+name = "smooth-operator-server"
+path = "src/main.rs"
+
+[dependencies]
+smooth-operator = { workspace = true }
+smooai-smooth-operator-core = { workspace = true }
+smooai-smooth-operator-adapter-memory = { path = "../adapters/in-memory" }
+
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+tokio = { workspace = true }
+
+axum = { version = "0.8", features = ["ws"] }
+futures-util = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tokio-tungstenite = "0.26"
+futures-util = "0.3"

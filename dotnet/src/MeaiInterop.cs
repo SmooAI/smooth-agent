@@ -1,6 +1,6 @@
 // Microsoft.Extensions.AI (MEAI) ecosystem interop.
 //
-// This file makes smooth-operator-agent consumable as a first-class .NET AI
+// This file makes smooth-operator consumable as a first-class .NET AI
 // component: a MEAI/MAF/Semantic-Kernel app can talk to the remote agent through
 // the de-facto-standard IChatClient abstraction instead of the protocol-level
 // SmoothAgentClient. The single highest-value alignment (per docs/DOTNET.md) is the
@@ -23,7 +23,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 
-namespace SmooAI.SmoothOperatorAgent;
+namespace SmooAI.SmoothOperator;
 
 /// <summary>
 /// Configuration for the MEAI facade and its DI registration. Carries everything
@@ -67,7 +67,7 @@ public sealed class SmoothAgentOptions
 }
 
 /// <summary>
-/// An <c>AgentThread</c>-style handle over a smooth-operator-agent conversation
+/// An <c>AgentThread</c>-style handle over a smooth-operator conversation
 /// session. Wraps the <c>sessionId</c>/<c>conversationId</c> so multi-turn chat is
 /// <c>thread.RunStreamingAsync(msg)</c> rather than manual id plumbing, mirroring the
 /// Microsoft Agent Framework <c>AgentThread</c> ergonomics.
@@ -119,7 +119,7 @@ public sealed class SmoothAgentThread
 
 /// <summary>
 /// A <see cref="IChatClient"/> facade over the remote <see cref="SmoothAgentClient"/>,
-/// so smooth-operator-agent slots into any Microsoft Agent Framework /
+/// so smooth-operator slots into any Microsoft Agent Framework /
 /// Semantic-Kernel / MEAI application. Streaming maps each <c>stream_token</c> (and
 /// the <c>token</c> mirror of <c>stream_chunk</c>) to a text-delta
 /// <see cref="ChatResponseUpdate"/>; the terminal <c>eventual_response</c> completes
@@ -150,7 +150,7 @@ public sealed class SmoothAgentChatClient : IChatClient
         _ambientThread = thread;
         _ownsClient = ownsClient;
         _metadata = new ChatClientMetadata(
-            providerName: "smooth-operator-agent",
+            providerName: "smooth-operator",
             providerUri: TryUri(options.Url),
             defaultModelId: string.IsNullOrEmpty(options.AgentId) ? null : options.AgentId);
     }

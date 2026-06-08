@@ -1,17 +1,17 @@
 apiVersion: v2
-name: smooth-operator-agent
+name: smooth-operator
 description: |
-  WebSocket reference service for smooth-operator-agent — speaks the
+  WebSocket reference service for smooth-operator — speaks the
   schema-driven protocol over a smooth-operator KnowledgeChatRuntime, backed by
   a pgvector Postgres in the Kubernetes / self-host deploy path.
 type: application
 # Chart version — bump on chart changes.
 version: 0.1.0
-# Tracks the smooai-smooth-operator-agent-server crate version.
+# Tracks the smooai-smooth-operator-server crate version.
 appVersion: "0.1.0"
-home: https://github.com/SmooAI/smooth-operator-agent
+home: https://github.com/SmooAI/smooth-operator
 sources:
-  - https://github.com/SmooAI/smooth-operator-agent
+  - https://github.com/SmooAI/smooth-operator
 keywords:
   - smooth-operator
   - websocket

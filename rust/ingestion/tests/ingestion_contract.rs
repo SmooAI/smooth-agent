@@ -14,10 +14,10 @@
 
 use std::sync::Arc;
 
-use smooth_operator_agent_adapter_memory::InMemoryStorageAdapter;
-use smooth_operator_agent_core::adapter::StorageAdapter;
+use smooth_operator::adapter::StorageAdapter;
+use smooth_operator_adapter_memory::InMemoryStorageAdapter;
 
-use smooth_operator_agent_ingestion::{
+use smooth_operator_ingestion::{
     ingest, Chunker, DeterministicEmbedder, IngestLedger, IngestOptions, MockConnector, RawDocument,
 };
 

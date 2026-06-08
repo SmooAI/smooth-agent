@@ -19,7 +19,7 @@
 //! export SMOOAI_GATEWAY_KEY=$(python3 -c \
 //!   "import json;print(json.load(open('$HOME/.local/share/opencode/auth.json'))['smooai']['key'])")
 //! export SMOOTH_AGENT_E2E=1
-//! cargo test -p smooai-smooth-operator-agent-evals --test llm_judge \
+//! cargo test -p smooai-smooth-operator-evals --test llm_judge \
 //!   -- --nocapture --test-threads=1
 //! ```
 //!
@@ -40,7 +40,7 @@
 //! per scenario. Every per-scenario score + reasoning is printed under
 //! `--nocapture` so misses are always visible.
 
-use smooth_operator_agent_evals::{default_scenarios, gate, run_scenario, JudgeConfig};
+use smooth_operator_evals::{default_scenarios, gate, run_scenario, JudgeConfig};
 
 /// Aggregate mean score the suite must clear.
 const AGGREGATE_MEAN_THRESHOLD: f64 = 4.0;

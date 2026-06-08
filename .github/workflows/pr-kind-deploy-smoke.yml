@@ -35,30 +35,30 @@ jobs:
       #  CROSS-REPO CHECKOUT
       # ──────────────────────────────────────────────────────────────────────
       # The image build spans TWO repos: the Rust workspace path-deps on the
-      # sibling `smooth-operator` repo, so the Docker build context must be the
+      # sibling `smooth-operator-core` repo, so the Docker build context must be the
       # PARENT dir that holds BOTH repos (see Dockerfile header + deploy/k8s/README.md).
       # We lay them out as siblings under the runner workspace:
       #
       #     ${{ github.workspace }}/
-      #       ├── smooth-operator-agent/   (this repo)
-      #       └── smooth-operator/         (the engine; sibling)
+      #       ├── smooth-operator/        (this repo)
+      #       └── smooth-operator-core/   (the engine; sibling)
       #
-      # FOLLOW-UP: once `smooai-smooth-operator` is published to crates.io
+      # FOLLOW-UP: once `smooai-smooth-operator-core` is published to crates.io
       # (roadmap Phase 0), the Rust workspace switches its path-dep to a version,
       # the Docker context collapses to this repo alone, and this second checkout
       # (plus the PARENT_DIR plumbing in kind-smoke.sh) can be deleted.
-      - name: Checkout smooth-operator-agent (this repo)
+      - name: Checkout smooth-operator (this repo)
         uses: actions/checkout@v4
         with:
-          path: smooth-operator-agent
-
-      - name: Checkout smooth-operator (sibling engine — cross-repo path dep)
-        uses: actions/checkout@v4
-        with:
-          repository: SmooAI/smooth-operator
           path: smooth-operator
+
+      - name: Checkout smooth-operator-core (sibling engine — cross-repo path dep)
+        uses: actions/checkout@v4
+        with:
+          repository: SmooAI/smooth-operator-core
+          path: smooth-operator-core
           # Private repo: a PAT/app token with read access is needed when this
-          # runs outside SmooAI/smooth-operator's own org-scoped GITHUB_TOKEN.
+          # runs outside SmooAI/smooth-operator-core's own org-scoped GITHUB_TOKEN.
           # Provide it as a secret and uncomment:
           # token: ${{ secrets.SMOOTH_OPERATOR_RO_TOKEN }}
 
@@ -81,7 +81,7 @@ jobs:
         run: python3 -m pip install --user "websockets>=12,<14"
 
       - name: Run kind deployment smoke
-        working-directory: smooth-operator-agent
+        working-directory: smooth-operator
         env:
           CLUSTER_NAME: smooth-agent-smoke
           # The cluster is created by helm/kind-action above; don't let the
@@ -99,4 +99,4 @@ jobs:
         run: |
           kubectl get pods -A || true
           kubectl -n smooth-agent-smoke describe pods || true
-          kubectl -n smooth-agent-smoke logs -l app.kubernetes.io/name=smooth-operator-agent --tail=120 || true
+          kubectl -n smooth-agent-smoke logs -l app.kubernetes.io/name=smooth-operator --tail=120 || true

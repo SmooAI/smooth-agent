@@ -13,7 +13,7 @@
 //!
 //! ## Sync trait over an async SDK
 //!
-//! [`CheckpointStore`](smooth_operator::CheckpointStore) is a **synchronous**
+//! [`CheckpointStore`](smooth_operator_core::CheckpointStore) is a **synchronous**
 //! trait (the engine calls `save`/`load_latest` directly), but `aws-sdk-dynamodb`
 //! is async. We bridge exactly like the Postgres adapter's knowledge base:
 //! [`run_blocking`](DynamoCheckpointStore::run_blocking) `spawn`s the async work
@@ -36,7 +36,7 @@ use aws_sdk_dynamodb::types::{AttributeValue, WriteRequest};
 use aws_sdk_dynamodb::Client;
 use tokio::runtime::Handle;
 
-use smooth_operator::{Checkpoint, CheckpointStore};
+use smooth_operator_core::{Checkpoint, CheckpointStore};
 
 use crate::keys::{self, attr};
 

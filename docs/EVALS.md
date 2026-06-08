@@ -1,6 +1,6 @@
 # LLM-as-Judge Evaluation Harness
 
-The `evals` crate (`smooai-smooth-operator-agent-evals`, at `rust/evals/`) is a
+The `evals` crate (`smooai-smooth-operator-evals`, at `rust/evals/`) is a
 quality-scoring harness for the reference agent. Where the core crate's
 end-to-end tests assert on substrings ("the reply contains `17`"), this harness
 asks a **second LLM — the judge — to score the *quality* of the agent's behavior
@@ -65,7 +65,7 @@ behavioral limitation**: `multi_turn_coherence` scored **1/5** because
 `KnowledgeChatRuntime` does not yet wire cross-turn memory (each `run_turn`
 builds a fresh `Agent` with a new id, so turn 2 has no recollection of turn 1's
 delivery date — the same gap documented in
-`smooth-operator-agent-core/tests/e2e_llm_smoo_ai.rs`). The judge caught it; a
+`smooth-operator/tests/e2e_llm_smoo_ai.rs`). The judge caught it; a
 substring check would not have. The aggregate stayed ≥ 4.0 (4.20), so the suite
 passes while loudly logging the miss for follow-up.
 
@@ -99,7 +99,7 @@ agent model and the test prints a NOTE flagging the limitation.
 export SMOOAI_GATEWAY_KEY=$(python3 -c \
   "import json;print(json.load(open('$HOME/.local/share/opencode/auth.json'))['smooai']['key'])")
 export SMOOTH_AGENT_E2E=1
-cargo test -p smooai-smooth-operator-agent-evals --test llm_judge \
+cargo test -p smooai-smooth-operator-evals --test llm_judge \
   -- --nocapture --test-threads=1
 ```
 

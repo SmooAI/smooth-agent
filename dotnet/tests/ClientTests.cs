@@ -7,7 +7,7 @@
 
 using System.Text.Json;
 
-namespace SmooAI.SmoothOperatorAgent.Tests;
+namespace SmooAI.SmoothOperator.Tests;
 
 public sealed class ClientTests
 {

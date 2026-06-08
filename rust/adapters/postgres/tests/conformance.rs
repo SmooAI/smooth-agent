@@ -21,16 +21,16 @@ use testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 
-use smooth_operator::{Checkpoint, Conversation as EngineConversation, Document, DocumentType};
-
-use smooth_operator_agent_adapter_postgres::PostgresAdapter;
-use smooth_operator_agent_core::adapter::{
-    ConversationUpdate, MessageQuery, SessionUpdate, StorageAdapter,
+use smooth_operator_core::{
+    Checkpoint, Conversation as EngineConversation, Document, DocumentType,
 };
-use smooth_operator_agent_core::domain::{
+
+use smooth_operator::adapter::{ConversationUpdate, MessageQuery, SessionUpdate, StorageAdapter};
+use smooth_operator::domain::{
     Conversation, Direction, Message, MessageContent, Participant, ParticipantType, Platform,
     Session, SessionStatus,
 };
+use smooth_operator_adapter_postgres::PostgresAdapter;
 
 fn conversation(id: &str, org: &str) -> Conversation {
     Conversation {
@@ -268,8 +268,8 @@ async fn full_lifecycle_through_the_postgres_adapter() -> anyhow::Result<()> {
     // run off the async worker threads via spawn_blocking — exactly how the
     // engine drives it. We assert that the engine-shaped usage round-trips.
     let checkpoints = store.checkpoints();
-    let latest =
-        tokio::task::spawn_blocking(move || -> anyhow::Result<smooth_operator::Checkpoint> {
+    let latest = tokio::task::spawn_blocking(
+        move || -> anyhow::Result<smooth_operator_core::Checkpoint> {
             let engine_conv = EngineConversation::new(100_000).with_system_prompt("ref runtime");
             let cp = Checkpoint::new("agent-uuid", &engine_conv, 1)
                 .with_metadata("threadId", "thread-abc");
@@ -277,8 +277,9 @@ async fn full_lifecycle_through_the_postgres_adapter() -> anyhow::Result<()> {
             Ok(checkpoints
                 .load_latest("agent-uuid")?
                 .expect("checkpoint exists"))
-        })
-        .await??;
+        },
+    )
+    .await??;
     assert_eq!(latest.agent_id, "agent-uuid");
     assert_eq!(latest.iteration, 1);
     assert_eq!(

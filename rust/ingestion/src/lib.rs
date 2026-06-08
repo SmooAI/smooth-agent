@@ -1,8 +1,8 @@
-//! # smooth-operator-agent ingestion
+//! # smooth-operator ingestion
 //!
-//! Knowledge **ingestion + connectors** for smooth-operator-agent — the pipeline
+//! Knowledge **ingestion + connectors** for smooth-operator — the pipeline
 //! that pulls documents from a source, chunks them, embeds them, and stores them
-//! in the [`StorageAdapter`](smooth_operator_agent_core::adapter::StorageAdapter)
+//! in the [`StorageAdapter`](smooth_operator::adapter::StorageAdapter)
 //! knowledge slice so they are retrievable. This closes Onyx-gap G1 (knowledge
 //! ingestion + connectors), G2 (document chunking pipeline), and G9 (the
 //! connector mock + `unit`-vs-`external` test split). See `docs/INGESTION.md`.
@@ -20,7 +20,7 @@
 //! - [`Chunker`] — paragraph/size split with overlap, stable chunk ids, metadata
 //!   propagation (G2).
 //! - [`Embedder`] — text→vector seam, shared with the Postgres adapter via
-//!   [`smooth_operator_agent_core::embedding`]; the network-free
+//!   [`smooth_operator::embedding`]; the network-free
 //!   [`DeterministicEmbedder`] is the default.
 //! - [`ingest`] — the driver, idempotent on `(doc id, content hash)` via an
 //!   [`IngestLedger`].
@@ -29,8 +29,8 @@
 //!
 //! ```no_run
 //! # use std::sync::Arc;
-//! # use smooth_operator_agent_core::adapter::StorageAdapter;
-//! # use smooth_operator_agent_ingestion::{
+//! # use smooth_operator::adapter::StorageAdapter;
+//! # use smooth_operator_ingestion::{
 //! #     ingest, Chunker, DeterministicEmbedder, FileConnector, IngestOptions,
 //! # };
 //! # async fn run(storage: Arc<dyn StorageAdapter>) -> anyhow::Result<()> {
@@ -61,6 +61,6 @@ pub use connectors::{FileConnector, WebConnector};
 // Re-exported here so existing `ingestion::{Embedder, DeterministicEmbedder, …}`
 // consumers keep working.
 pub use pipeline::{ingest, IngestLedger, IngestOptions, IngestReport};
-pub use smooth_operator_agent_core::embedding::{
+pub use smooth_operator::embedding::{
     DeterministicEmbedder, Embedder, InputType, DEFAULT_EMBEDDING_DIM,
 };

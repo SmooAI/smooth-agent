@@ -1,5 +1,5 @@
 {
-  "$comment": "Conformance fixtures for the smooth-operator-agent wire protocol. Each entry is a valid instance of the named schema. Clients and servers validate their outgoing/incoming messages against these to catch drift between implementations.",
+  "$comment": "Conformance fixtures for the smooth-operator wire protocol. Each entry is a valid instance of the named schema. Clients and servers validate their outgoing/incoming messages against these to catch drift between implementations.",
 
   "create_session_request": {
     "$schema_ref": "actions/create-conversation-session.schema.json#/$defs/Request",

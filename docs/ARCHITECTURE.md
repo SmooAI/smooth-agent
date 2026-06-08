@@ -1,12 +1,12 @@
 # Architecture
 
-smooth-operator-agent is the **service layer** on top of [`smooth-operator`](https://github.com/SmooAI/smooth-operator) (the agent engine). This document describes how the pieces fit, what we borrowed from [Onyx](https://github.com/onyx-dot-app/onyx), and why the design is serverless-first.
+smooth-operator is the **service layer** on top of [`smooth-operator`](https://github.com/SmooAI/smooth-operator-core) (the agent engine). This document describes how the pieces fit, what we borrowed from [Onyx](https://github.com/onyx-dot-app/onyx), and why the design is serverless-first.
 
 ## 1. The big picture
 
 ```
                     ┌──────────────────────────────────────────────┐
-   WebSocket /      │                  smooth-operator-agent                 │
+   WebSocket /      │                  smooth-operator                 │
    HTTP client  ───▶│                                              │
   (browser, app,    │  ┌───────────┐   ┌──────────────────────┐    │
    chat widget)     │  │ Protocol  │──▶│   Agent Runtime       │    │
@@ -36,13 +36,13 @@ smooth-operator-agent is the **service layer** on top of [`smooth-operator`](htt
 
 The **only** thing a client ever sees is the [protocol](PROTOCOL.md). Everything behind it — which language the service runs in, which storage backend is wired up, whether the agent core is embedded in-process or called as an engine — is swappable.
 
-## 2. How it consumes smooth-operator
+## 2. How it consumes smooth-operator-core
 
 The smooai monorepo today runs its agent on **LangGraph** (TypeScript) — a `StateGraph` with nodes `intake_bootstrap → guardrails → knowledge_search ↔ response_gen ↔ tool_execution → structure_response → escalation → analytics → memory_update`, checkpointed with `PostgresSaver`.
 
-smooth-operator-agent **replaces LangGraph with smooth-operator**. The mapping is direct because smooth-operator already ships the analogous primitives:
+smooth-operator **replaces LangGraph with smooth-operator**. The mapping is direct because smooth-operator already ships the analogous primitives:
 
-| LangGraph (smooai today) | smooth-operator (smooth-operator-agent) |
+| LangGraph (smooai today) | smooth-operator (smooth-operator) |
 | ------------------------ | ------------------------------ |
 | `StateGraph` / `Annotation.Root` | `Workflow<S>` / `WorkflowBuilder<S>` |
 | graph node | `Node<S>` (or `FnNode<S>`) |
@@ -52,7 +52,7 @@ smooth-operator-agent **replaces LangGraph with smooth-operator**. The mapping i
 | tool bound to model | `Tool` trait + `ToolRegistry` |
 | streaming `stream_chunk` events | `AgentEvent` stream (`Started`, `LlmRequest`, `ToolCallStart/Complete`, `TokenDelta`, `Completed`, `HumanInputRequired`, …) |
 | HITL write-confirmation / OTP pause | `human` module — `HumanRequest::Confirm`, `ConfirmationHook` (`ToolHook::pre_call`) |
-| Voyage embeddings + pgvector retrieval | `KnowledgeBase` trait (smooth-operator-agent provides the real vector-backed impl; the crate ships an in-memory stub) |
+| Voyage embeddings + pgvector retrieval | `KnowledgeBase` trait (smooth-operator-core provides the real vector-backed impl; the crate ships an in-memory stub) |
 
 The agent pipeline (the nine "nodes") is re-expressed as a smooth-operator `Workflow`. See [ROADMAP.md](ROADMAP.md) Phase 3.
 
@@ -110,4 +110,4 @@ Both paths are first-class and tested. The storage adapter is the seam that make
 
 ## 7. Polyglot strategy
 
-`.NET` is a first-class target and the agent core is async + streaming-heavy. FFI codegen for .NET/Go is immature for async streaming (uniffi-bindgen-cs is young; csbindgen has no async; UniFFI has open async-trait bugs). So the spine is **protocol-first**: [`spec/`](../spec) defines the wire protocol once, and each language ships an idiomatic native client. In-process FFI (napi-rs for TS, PyO3/uniffi for Python) is layered on **only where embedding the engine in-process pays off** — never as the only way to use a language. See [smooth-operator's bindings strategy](https://github.com/SmooAI/smooth-operator) and [ROADMAP.md](ROADMAP.md) Phase 5.
+`.NET` is a first-class target and the agent core is async + streaming-heavy. FFI codegen for .NET/Go is immature for async streaming (uniffi-bindgen-cs is young; csbindgen has no async; UniFFI has open async-trait bugs). So the spine is **protocol-first**: [`spec/`](../spec) defines the wire protocol once, and each language ships an idiomatic native client. In-process FFI (napi-rs for TS, PyO3/uniffi for Python) is layered on **only where embedding the engine in-process pays off** — never as the only way to use a language. See [smooth-operator's bindings strategy](https://github.com/SmooAI/smooth-operator-core) and [ROADMAP.md](ROADMAP.md) Phase 5.

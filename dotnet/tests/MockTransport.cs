@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace SmooAI.SmoothOperatorAgent.Tests;
+namespace SmooAI.SmoothOperator.Tests;
 
 /// <summary>In-memory transport: captures sent frames, lets the test inject server events.</summary>
 internal sealed class MockTransport : ITransport

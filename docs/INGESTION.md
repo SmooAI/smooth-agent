@@ -1,8 +1,8 @@
 # Knowledge ingestion & connectors
 
-smooth-operator-agent's knowledge base used to be seeded by hand: you called
+smooth-operator's knowledge base used to be seeded by hand: you called
 `KnowledgeBase::ingest(doc)` yourself. The **ingestion crate**
-(`rust/ingestion`, package `smooai-smooth-operator-agent-ingestion`) closes that
+(`rust/ingestion`, package `smooai-smooth-operator-ingestion`) closes that
 gap — it pulls documents from a *source*, chunks them, embeds them, and stores
 them in the `StorageAdapter` knowledge slice so they're retrievable. This is the
 analog of [Onyx's connector framework](ONYX-TESTING-GAP-ANALYSIS.md) and closes
@@ -21,8 +21,8 @@ One call drives the whole thing:
 
 ```rust
 use std::sync::Arc;
-use smooth_operator_agent_core::adapter::StorageAdapter;
-use smooth_operator_agent_ingestion::{
+use smooth_operator::adapter::StorageAdapter;
+use smooth_operator_ingestion::{
     ingest, Chunker, DeterministicEmbedder, FileConnector, IngestLedger, IngestOptions,
 };
 
@@ -159,7 +159,7 @@ pub trait Embedder: Send + Sync {
 `DeterministicEmbedder` is the default: a network-free, FNV-1a token-hashing,
 L2-normalized pseudo-embedder (1024-d) — same text → same vector, shared-token
 texts land closer. The `Embedder` trait, `InputType`, and `DeterministicEmbedder`
-now live in **one shared home**, `smooth_operator_agent_core::embedding`, which
+now live in **one shared home**, `smooth_operator::embedding`, which
 both this ingestion crate and the Postgres adapter import (re-exported as
 `ingestion::{Embedder, DeterministicEmbedder, …}` for compatibility). They used
 to each carry a byte-identical copy; consolidating them removes the drift risk —
@@ -203,8 +203,8 @@ Run them:
 
 ```bash
 cd rust
-cargo test -p smooai-smooth-operator-agent-ingestion          # unit tier
-SMOOTH_AGENT_E2E=1 cargo test -p smooai-smooth-operator-agent-ingestion \
+cargo test -p smooai-smooth-operator-ingestion          # unit tier
+SMOOTH_AGENT_E2E=1 cargo test -p smooai-smooth-operator-ingestion \
   -- --ignored                                                # + live web fetch
 ```
 

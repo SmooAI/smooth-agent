@@ -21,16 +21,16 @@ use testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage};
 
-use smooth_operator::{Checkpoint, Conversation as EngineConversation, Document, DocumentType};
-
-use smooth_operator_agent_adapter_dynamodb::DynamoDbAdapter;
-use smooth_operator_agent_core::adapter::{
-    ConversationUpdate, MessageQuery, SessionUpdate, StorageAdapter,
+use smooth_operator_core::{
+    Checkpoint, Conversation as EngineConversation, Document, DocumentType,
 };
-use smooth_operator_agent_core::domain::{
+
+use smooth_operator::adapter::{ConversationUpdate, MessageQuery, SessionUpdate, StorageAdapter};
+use smooth_operator::domain::{
     Conversation, Direction, Message, MessageContent, Participant, ParticipantType, Platform,
     Session, SessionStatus,
 };
+use smooth_operator_adapter_dynamodb::DynamoDbAdapter;
 
 fn conversation(id: &str, org: &str) -> Conversation {
     Conversation {
@@ -112,7 +112,7 @@ async fn connect(endpoint: &str) -> anyhow::Result<DynamoDbAdapter> {
     std::env::set_var("AWS_ACCESS_KEY_ID", "test");
     std::env::set_var("AWS_SECRET_ACCESS_KEY", "test");
     std::env::set_var("AWS_REGION", "us-east-1");
-    std::env::set_var("SMOOTH_AGENT_DDB_TABLE", "smooth-operator-agent-test");
+    std::env::set_var("SMOOTH_AGENT_DDB_TABLE", "smooth-operator-test");
 
     let adapter = DynamoDbAdapter::from_env(Some(endpoint)).await?;
     adapter.create_table().await?;

@@ -1,4 +1,4 @@
-//! LLM-as-judge evaluation harness for `smooth-operator-agent`.
+//! LLM-as-judge evaluation harness for `smooth-operator`.
 //!
 //! Where the core crate's tests assert on substrings ("the reply contains
 //! `17`"), this harness asks a **second LLM** — the *judge* — to score the
@@ -40,11 +40,11 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
-use smooth_operator::llm::{ApiFormat, RetryPolicy};
-use smooth_operator::{Document, DocumentType, LlmClient, LlmConfig, Message};
-use smooth_operator_agent_adapter_memory::InMemoryStorageAdapter;
-use smooth_operator_agent_core::runtime::KnowledgeChatRuntime;
-use smooth_operator_agent_core::StorageAdapter;
+use smooth_operator::runtime::KnowledgeChatRuntime;
+use smooth_operator::StorageAdapter;
+use smooth_operator_adapter_memory::InMemoryStorageAdapter;
+use smooth_operator_core::llm::{ApiFormat, RetryPolicy};
+use smooth_operator_core::{Document, DocumentType, LlmClient, LlmConfig, Message};
 
 /// The live OpenAI-compatible gateway.
 pub const GATEWAY_URL: &str = "https://llm.smoo.ai/v1";

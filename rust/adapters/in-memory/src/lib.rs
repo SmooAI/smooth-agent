@@ -13,11 +13,13 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::Utc;
 
-use smooth_operator::{CheckpointStore, InMemoryKnowledge, KnowledgeBase, MemoryCheckpointStore};
-use smooth_operator_agent_core::adapter::{
+use smooth_operator::adapter::{
     ConversationUpdate, MessagePage, MessageQuery, SessionUpdate, StorageAdapter,
 };
-use smooth_operator_agent_core::domain::{Conversation, Message, Participant, Session};
+use smooth_operator::domain::{Conversation, Message, Participant, Session};
+use smooth_operator_core::{
+    CheckpointStore, InMemoryKnowledge, KnowledgeBase, MemoryCheckpointStore,
+};
 
 #[derive(Default)]
 struct Tables {

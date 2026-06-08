@@ -7,7 +7,7 @@ form, read idiomatic snake_case attributes, and re-emit the camelCase wire form 
 
 from __future__ import annotations
 
-from smooth_operator_agent import (
+from smooth_operator import (
     ConversationMessage,
     Message,
     Participant,

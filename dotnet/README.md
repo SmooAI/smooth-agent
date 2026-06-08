@@ -1,6 +1,6 @@
-# `SmooAI.SmoothOperatorAgent`
+# `SmooAI.SmoothOperator`
 
-C#/.NET protocol types and a native WebSocket client for the **smooth-operator-agent**
+C#/.NET protocol types and a native WebSocket client for the **smooth-operator**
 protocol. Sibling to the [TypeScript](../typescript) reference client.
 
 The wire contract is the language-neutral JSON Schema in [`../spec`](../spec). The
@@ -29,7 +29,7 @@ and tests run on `net8.0` for the broadest consumer reach.
 ## Usage
 
 ```csharp
-using SmooAI.SmoothOperatorAgent;
+using SmooAI.SmoothOperator;
 
 await using var client = new SmoothAgentClient(new SmoothAgentClientOptions
 {
@@ -92,6 +92,6 @@ dotnet run --project tools/Generator
 ## Build & test
 
 ```bash
-dotnet build SmooAI.SmoothOperatorAgent.slnx
-dotnet test  SmooAI.SmoothOperatorAgent.slnx
+dotnet build SmooAI.SmoothOperator.slnx
+dotnet test  SmooAI.SmoothOperator.slnx
 ```

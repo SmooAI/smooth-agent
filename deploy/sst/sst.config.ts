@@ -2,7 +2,7 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
 /**
- * SST v4 app — the AWS-serverless deploy path for `smooth-operator-agent`.
+ * SST v4 app — the AWS-serverless deploy path for `smooth-operator`.
  *
  * The reusable resources (API Gateway WebSocket + Rust Lambda wiring +
  * DynamoDB single table + S3 blob bucket + S3 Vectors env wiring + gateway-key
@@ -32,12 +32,12 @@ import { SmoothAgentApi } from '@smooai/deploy';
 
 // SST has no native Rust builder — this is the `cargo lambda` output dir holding
 // the `bootstrap` artifact. The single place that path is declared.
-const ARTIFACT_DIR = '../../rust/target/lambda/smooai-smooth-operator-agent-lambda';
+const ARTIFACT_DIR = '../../rust/target/lambda/smooai-smooth-operator-lambda';
 
 export default $config({
     app(input) {
         return {
-            name: 'smooth-operator-agent',
+            name: 'smooth-operator',
             removal: input?.stage === 'production' ? 'retain' : 'remove',
             protect: ['production'].includes(input?.stage ?? ''),
             home: 'aws',

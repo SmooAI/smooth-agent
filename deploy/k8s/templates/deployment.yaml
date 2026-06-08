@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "smooth-operator-agent.fullname" . }}
+  name: {{ include "smooth-operator.fullname" . }}
   labels:
-    {{- include "smooth-operator-agent.labels" . | nindent 4 }}
+    {{- include "smooth-operator.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "smooth-operator-agent.selectorLabels" . | nindent 6 }}
+      {{- include "smooth-operator.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -20,7 +20,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "smooth-operator-agent.selectorLabels" . | nindent 8 }}
+        {{- include "smooth-operator.selectorLabels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -29,7 +29,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "smooth-operator-agent.serviceAccountName" . }}
+      serviceAccountName: {{ include "smooth-operator.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
@@ -44,7 +44,7 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ include "smooth-operator-agent.fullname" . }}-config
+                name: {{ include "smooth-operator.fullname" . }}-config
           env:
             {{- /* Gateway key — optional at startup; omitted if neither inline
                    value nor external ref is configured (server still answers
@@ -53,8 +53,8 @@ spec:
             - name: SMOOAI_GATEWAY_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "smooth-operator-agent.gatewayKeySecretName" . }}
-                  key: {{ include "smooth-operator-agent.gatewayKeySecretKey" . }}
+                  name: {{ include "smooth-operator.gatewayKeySecretName" . }}
+                  key: {{ include "smooth-operator.gatewayKeySecretKey" . }}
             {{- end }}
             {{- /* Database URL — required for the pgvector-backed Postgres
                    adapter. Server reads SMOOTH_AGENT_DATABASE_URL first, then
@@ -63,8 +63,8 @@ spec:
             - name: SMOOTH_AGENT_DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "smooth-operator-agent.databaseSecretName" . }}
-                  key: {{ include "smooth-operator-agent.databaseSecretKey" . }}
+                  name: {{ include "smooth-operator.databaseSecretName" . }}
+                  key: {{ include "smooth-operator.databaseSecretKey" . }}
             {{- end }}
             {{- with .Values.server.extraEnv }}
             {{- toYaml . | nindent 12 }}

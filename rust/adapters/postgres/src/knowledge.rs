@@ -1,6 +1,6 @@
 //! pgvector-backed [`KnowledgeBase`] with hybrid dense + sparse retrieval.
 //!
-//! smooth-operator's [`KnowledgeBase`](smooth_operator::KnowledgeBase) trait is
+//! smooth-operator's [`KnowledgeBase`](smooth_operator_core::KnowledgeBase) trait is
 //! **synchronous** (the engine calls `ingest`/`query` directly), but both
 //! embedding and Postgres access are async here. We bridge the two by `spawn`ing
 //! the async work onto the captured runtime [`Handle`] (so its I/O makes
@@ -28,9 +28,9 @@ use anyhow::{anyhow, Result};
 use deadpool_postgres::Pool;
 use tokio::runtime::Handle;
 
-use smooth_operator::{Document, KnowledgeBase, KnowledgeResult};
+use smooth_operator_core::{Document, KnowledgeBase, KnowledgeResult};
 
-use smooth_operator_agent_core::embedding::{Embedder, InputType};
+use smooth_operator::embedding::{Embedder, InputType};
 
 /// RRF constant. 60 is the canonical value from the original RRF paper; it
 /// damps the contribution of low-ranked items without ignoring them.

@@ -3,17 +3,17 @@
 //! Exercises every slice: conversation CRUD, participants (user + ai-agent),
 //! message append + paging, session create/update, and a checkpoint
 //! round-trip through the `CheckpointStore` accessor (proving the
-//! smooth-operator engine plugs into the adapter seam).
+//! smooth-operator-core engine plugs into the adapter seam).
 
 use chrono::Utc;
 
-use smooth_operator::{Checkpoint, Conversation as EngineConversation};
-use smooth_operator_agent_adapter_memory::InMemoryStorageAdapter;
-use smooth_operator_agent_core::adapter::{MessageQuery, SessionUpdate, StorageAdapter};
-use smooth_operator_agent_core::domain::{
+use smooth_operator::adapter::{MessageQuery, SessionUpdate, StorageAdapter};
+use smooth_operator::domain::{
     Conversation, Direction, Message, MessageContent, Participant, ParticipantType, Platform,
     Session, SessionStatus,
 };
+use smooth_operator_adapter_memory::InMemoryStorageAdapter;
+use smooth_operator_core::{Checkpoint, Conversation as EngineConversation};
 
 fn conversation(id: &str, org: &str) -> Conversation {
     Conversation {
@@ -100,7 +100,7 @@ async fn full_lifecycle_through_the_adapter() {
     let updated = store
         .update_conversation(
             "conv-1",
-            smooth_operator_agent_core::adapter::ConversationUpdate {
+            smooth_operator::adapter::ConversationUpdate {
                 name: Some("Renamed".into()),
                 ..Default::default()
             },
@@ -241,10 +241,10 @@ async fn full_lifecycle_through_the_adapter() {
 
     // --- knowledge accessor plugs in too ---
     let kb = store.knowledge();
-    kb.ingest(smooth_operator::Document::new(
+    kb.ingest(smooth_operator_core::Document::new(
         "smooth-agent is the service layer over smooth-operator",
         "docs/ARCHITECTURE.md",
-        smooth_operator::DocumentType::Documentation,
+        smooth_operator_core::DocumentType::Documentation,
     ))
     .expect("ingest");
     let results = kb.query("smooth-agent service", 5).expect("query");

@@ -1,4 +1,4 @@
-# Default values for the smooth-operator-agent chart.
+# Default values for the smooth-operator chart.
 # All overridable per-environment via `helm install -f my-values.yaml` or
 # ArgoCD `helm.valuesObject` (see deploy/k8s/argocd/application.yaml).
 
@@ -7,7 +7,7 @@ replicaCount: 2
 image:
   # Image build is cross-repo (see Dockerfile header + deploy/k8s/README.md).
   # Point this at your registry once the image is built + pushed.
-  repository: ghcr.io/smooai/smooth-operator-agent
+  repository: ghcr.io/smooai/smooth-operator
   # Prefer an immutable tag/digest in prod. ArgoCD Image Updater can manage this.
   tag: ""        # defaults to .Chart.AppVersion when empty
   pullPolicy: IfNotPresent
@@ -61,8 +61,8 @@ server:
   maxIterations: 6
   # SMOOTH_AGENT_MAX_TOKENS — max_tokens sent to the gateway.
   maxTokens: 512
-  # RUST_LOG — tracing filter. Falls back to "info,smooth_operator_agent_server=info".
-  rustLog: "info,smooth_operator_agent_server=info"
+  # RUST_LOG — tracing filter. Falls back to "info,smooth_operator_server=info".
+  rustLog: "info,smooth_operator_server=info"
   # Extra raw env vars (list of {name, value}) merged into the container.
   extraEnv: []
 
@@ -113,14 +113,14 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     nginx.ingress.kubernetes.io/websocket-services: ""   # filled with the svc name at render time if blank
-  host: smooth-operator-agent.example.com
+  host: smooth-operator.example.com
   path: /ws
   pathType: Prefix
   tls:
     enabled: false
     # secretName for the TLS cert. With cert-manager, also add the issuer
     # annotation under ingress.annotations.
-    secretName: smooth-operator-agent-tls
+    secretName: smooth-operator-tls
 
 resources:
   requests:

@@ -1,12 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
-    "smooth-operator-agent-core",
+    "smooth-operator",
     "adapters/in-memory",
     "adapters/postgres",
     "adapters/dynamodb",
-    "smooth-operator-agent-server",
-    "smooth-operator-agent-lambda",
+    "smooth-operator-server",
+    "smooth-operator-lambda",
     "ingestion",
     "evals",
 ]
@@ -14,13 +14,13 @@ members = [
 [workspace.package]
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/SmooAI/smooth-operator-agent"
+repository = "https://github.com/SmooAI/smooth-operator"
 
 [workspace.dependencies]
 # Reference core depends on the agent engine.
 # TODO: switch to crates.io once smooth-operator is published (roadmap Phase 0)
-smooai-smooth-operator = { path = "../../smooth-operator/rust/smooth-operator" }
-smooth-operator-agent-core = { package = "smooai-smooth-operator-agent-core", path = "smooth-operator-agent-core" }
+smooai-smooth-operator-core = { path = "../../smooth-operator-core/rust/smooth-operator-core" }
+smooth-operator = { package = "smooai-smooth-operator", path = "smooth-operator" }
 
 async-trait = "0.1"
 anyhow = "1"

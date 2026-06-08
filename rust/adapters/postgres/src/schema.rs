@@ -6,7 +6,7 @@
 //! generated `content_tsv` + HNSW cosine index).
 //!
 //! The `checkpoints` table is **not** created here — that is owned by
-//! smooth-operator's [`PostgresCheckpointStore`](smooth_operator::PostgresCheckpointStore),
+//! smooth-operator's [`PostgresCheckpointStore`](smooth_operator_core::PostgresCheckpointStore),
 //! which runs its own `CREATE TABLE IF NOT EXISTS checkpoints …` against the same
 //! database when the adapter constructs it. Keeping the DDL in its source crate
 //! avoids two definitions of the same table drifting apart.
@@ -105,7 +105,7 @@ pub const VECTOR_EXTENSION: &str = "CREATE EXTENSION IF NOT EXISTS vector;";
 /// BM25-style sparse retrieval, `metadata jsonb`, `organization_id`, and an HNSW
 /// cosine index on the embedding. The dimension is parameterized so the column
 /// width always matches the configured
-/// [`Embedder`](smooth_operator_agent_core::embedding::Embedder).
+/// [`Embedder`](smooth_operator::embedding::Embedder).
 #[must_use]
 pub fn knowledge_vectors_schema(dim: usize) -> String {
     format!(

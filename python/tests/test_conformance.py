@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from smooth_operator_agent.validate import DEFAULT_SPEC_DIR, ProtocolValidator, format_errors
+from smooth_operator.validate import DEFAULT_SPEC_DIR, ProtocolValidator, format_errors
 
 SPEC_DIR = DEFAULT_SPEC_DIR
 FIXTURES = json.loads((SPEC_DIR / "conformance" / "fixtures.json").read_text())

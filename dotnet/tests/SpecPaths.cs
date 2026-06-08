@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace SmooAI.SmoothOperatorAgent.Tests;
+namespace SmooAI.SmoothOperator.Tests;
 
 /// <summary>Locates the repo's spec/ directory from the test assembly location.</summary>
 internal static class SpecPaths

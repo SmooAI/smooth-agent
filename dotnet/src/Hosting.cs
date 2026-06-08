@@ -1,4 +1,4 @@
-// DI wiring for smooth-operator-agent's MEAI facade.
+// DI wiring for smooth-operator's MEAI facade.
 //
 // services.AddSmoothAgent(o => { o.Url = ...; o.AgentId = ...; }) registers the
 // transport + SmoothAgentClient + SmoothAgentChatClient (as IChatClient), so a
@@ -9,13 +9,13 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
-namespace SmooAI.SmoothOperatorAgent;
+namespace SmooAI.SmoothOperator;
 
 /// <summary><see cref="IServiceCollection"/> extensions for registering the agent client + MEAI facade.</summary>
 public static class SmoothAgentServiceCollectionExtensions
 {
     /// <summary>
-    /// Register the smooth-operator-agent client and its <see cref="IChatClient"/>
+    /// Register the smooth-operator client and its <see cref="IChatClient"/>
     /// facade. Resolves:
     /// <list type="bullet">
     ///   <item><see cref="SmoothAgentOptions"/> (singleton, configured)</item>

@@ -8,7 +8,7 @@
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace SmooAI.SmoothOperatorAgent.Tests;
+namespace SmooAI.SmoothOperator.Tests;
 
 public sealed class MeaiInteropTests
 {
@@ -187,7 +187,7 @@ public sealed class MeaiInteropTests
         // GetService surfaces metadata + the wrapped client.
         var metadata = chatClient.GetService(typeof(ChatClientMetadata)) as ChatClientMetadata;
         Assert.NotNull(metadata);
-        Assert.Equal("smooth-operator-agent", metadata!.ProviderName);
+        Assert.Equal("smooth-operator", metadata!.ProviderName);
         Assert.Equal("agent-1", metadata.DefaultModelId);
     }
 

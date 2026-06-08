@@ -1,9 +1,9 @@
-# smooth-operator-agent (Python)
+# smooth-operator (Python)
 
 Python protocol types and a native **async** WebSocket client for the
-[smooth-operator-agent](../docs/PROTOCOL.md) protocol. The wire contract lives in the
+[smooth-operator](../docs/PROTOCOL.md) protocol. The wire contract lives in the
 language-neutral JSON Schemas under [`../spec/`](../spec); the pydantic models in
-`smooth_operator_agent._generated` are generated from those schemas and committed.
+`smooth_operator._generated` are generated from those schemas and committed.
 
 This mirrors the structure/ergonomics of the TypeScript reference client in
 [`../typescript/`](../typescript).
@@ -12,7 +12,7 @@ This mirrors the structure/ergonomics of the TypeScript reference client in
 
 ```bash
 uv sync
-uv run python -c "import smooth_operator_agent"
+uv run python -c "import smooth_operator"
 uv run pytest
 ```
 
@@ -23,14 +23,14 @@ uv run python scripts/generate.py
 ```
 
 This reads `../spec/**/*.schema.json` and writes
-`src/smooth_operator_agent/_generated.py` using
+`src/smooth_operator/_generated.py` using
 [datamodel-code-generator](https://github.com/koxudaxi/datamodel-code-generator).
 
 ## Usage
 
 ```python
 import asyncio
-from smooth_operator_agent import SmoothAgentClient
+from smooth_operator import SmoothAgentClient
 
 async def main():
     client = SmoothAgentClient(url="wss://realtime.prod.smooth-agent.dev")

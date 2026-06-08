@@ -3,7 +3,7 @@
  *
  * This is the *real-transport* counterpart to `client.test.ts` (which drives the
  * client through an in-memory mock). Here we boot the actual Rust
- * `smooth-operator-agent-server` binary, connect the native
+ * `smooth-operator-server` binary, connect the native
  * {@link SmoothAgentClient} over a real `ws://127.0.0.1:8810/ws` socket using
  * Node 22's global `WebSocket`, and drive real LLM turns through the live gateway.
  *
@@ -57,8 +57,8 @@ if (!E2E_ENABLED) {
 /** Unique port for this harness (see CLAUDE.md task contract). */
 const PORT = 8810;
 const WS_URL = `ws://127.0.0.1:${PORT}/ws`;
-/** Binary built by `cargo build -p smooai-smooth-operator-agent-server`. */
-const SERVER_BIN = `${process.env.HOME}/.cargo/shared-target/debug/smooth-operator-agent-server`;
+/** Binary built by `cargo build -p smooai-smooth-operator-server`. */
+const SERVER_BIN = `${process.env.HOME}/.cargo/shared-target/debug/smooth-operator-server`;
 /** Overall budget per real LLM turn — the gateway + tool loop can be slow. */
 const TURN_TIMEOUT_MS = 120_000;
 

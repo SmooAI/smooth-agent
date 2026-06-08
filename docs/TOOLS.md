@@ -3,7 +3,7 @@
 The reference core ships a small **built-in tool catalog** the agent can call
 during a turn. Each tool implements smooth-operator's `Tool` trait, so the
 engine's `Agent` invokes it like any other tool. The catalog lives in
-`rust/smooth-operator-agent-core/src/tools/`.
+`rust/smooth-operator/src/tools/`.
 
 | Tool | Args | Returns | Read-only | Source |
 | --- | --- | --- | --- | --- |
@@ -18,8 +18,8 @@ A tool is anything that implements smooth-operator's `Tool` trait:
 
 ```rust
 use async_trait::async_trait;
-use smooth_operator::tool::ToolSchema;
-use smooth_operator::Tool;
+use smooth_operator_core::tool::ToolSchema;
+use smooth_operator_core::Tool;
 
 pub struct MyTool;
 
@@ -66,9 +66,9 @@ impl Tool for MyTool {
 
 ```rust
 use std::sync::Arc;
-use smooth_operator::ToolRegistry;
-use smooth_operator_agent_core::tools::{builtin_tools, ToolContext};
-use smooth_operator_agent_core::adapter::StorageAdapter;
+use smooth_operator_core::ToolRegistry;
+use smooth_operator::tools::{builtin_tools, ToolContext};
+use smooth_operator::adapter::StorageAdapter;
 
 fn wire(storage: Arc<dyn StorageAdapter>) {
     let ctx = ToolContext::new(storage, "conversation-123");
@@ -135,8 +135,8 @@ Tavily, SerpAPI, …) and inject it via `ToolContext::with_web_search`:
 ```rust
 use std::sync::Arc;
 use async_trait::async_trait;
-use smooth_operator_agent_core::tools::{SearchResult, ToolContext, WebSearchProvider};
-use smooth_operator_agent_core::adapter::StorageAdapter;
+use smooth_operator::tools::{SearchResult, ToolContext, WebSearchProvider};
+use smooth_operator::adapter::StorageAdapter;
 
 struct BraveSearch { api_key: String, http: reqwest::Client }
 
@@ -175,7 +175,7 @@ rather than an empty list the model might mistake for "no results found".
    storage adapter (pure input validation, formatting, guards). Tests that need
    the in-memory adapter go in `tests/builtin_tools.rs` (an integration test) —
    a `src/` unit test that depends on the `…-adapter-memory` dev-dependency
-   would pull in two copies of `smooth-operator-agent-core` and the
+   would pull in two copies of `smooth-operator` and the
    `StorageAdapter` trait impls wouldn't line up.
 3. Export it from `tools/mod.rs` and, if it belongs in the default catalog, add
    it to `builtin_tools(ctx)`.
@@ -186,4 +186,4 @@ rather than an empty list the model might mistake for "no results found".
 
 - `docs/STORAGE.md` — the `StorageAdapter` seam the tools read through.
 - `docs/ARCHITECTURE.md` — where tools sit in the agent turn.
-- `rust/smooth-operator-agent-core/src/tools/` — the implementations.
+- `rust/smooth-operator/src/tools/` — the implementations.

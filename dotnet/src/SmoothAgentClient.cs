@@ -1,5 +1,5 @@
 // SmoothAgentClient — an idiomatic, transport-agnostic async client for the
-// smooth-operator-agent WebSocket protocol.
+// smooth-operator WebSocket protocol.
 //
 // Design goals
 // ------------
@@ -21,7 +21,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Threading.Channels;
 
-namespace SmooAI.SmoothOperatorAgent;
+namespace SmooAI.SmoothOperator;
 
 /// <summary>A protocol-level error surfaced as an exception.</summary>
 public sealed class ProtocolException : Exception

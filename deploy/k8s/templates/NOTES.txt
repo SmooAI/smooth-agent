@@ -1,4 +1,4 @@
-smooth-operator-agent has been deployed.
+smooth-operator has been deployed.
 
 Release:   {{ .Release.Name }}
 Namespace: {{ .Release.Namespace }}
@@ -14,7 +14,7 @@ Reachable via Ingress at:
 {{- else }}
 
 Ingress is disabled. Port-forward to test locally:
-  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "smooth-operator-agent.fullname" . }} 8787:{{ .Values.service.port }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "smooth-operator.fullname" . }} 8787:{{ .Values.service.port }}
   # then connect a WS client to ws://127.0.0.1:8787/ws
 {{- end }}
 
@@ -37,5 +37,5 @@ Config / secrets:
 {{- end }}
 
 REMINDER (0.0.0.0 bind follow-up): the server currently binds 127.0.0.1 in
-rust/smooth-operator-agent-server/src/server.rs. Until that one-liner ships,
+rust/smooth-operator-server/src/server.rs. Until that one-liner ships,
 in-cluster Service/Ingress traffic CANNOT reach the pod. See deploy/k8s/README.md.

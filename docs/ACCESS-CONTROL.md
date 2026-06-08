@@ -1,7 +1,7 @@
 # Document-level access control
 
 Onyx syncs per-connector permissions and filters retrieval by user entitlement;
-before this, smooth-operator-agent filtered knowledge by `organizationId` only.
+before this, smooth-operator filtered knowledge by `organizationId` only.
 This is the within-org **document-level** layer (Onyx-gap **G3**, the
 highest-severity gap in [ONYX-TESTING-GAP-ANALYSIS.md](ONYX-TESTING-GAP-ANALYSIS.md)):
 even inside one organization, a document may be restricted to specific users or
@@ -14,7 +14,7 @@ control is **additive on top** of org isolation.
 
 ## Where enforcement lives — our layer, not the engine
 
-smooth-operator's `KnowledgeBase` trait is upstream and read-only to this repo.
+smooth-operator-core's `KnowledgeBase` trait is upstream and read-only to this repo.
 Two facts force enforcement into our layer:
 
 1. `KnowledgeBase::query` returns a `KnowledgeResult` that carries only
@@ -23,7 +23,7 @@ Two facts force enforcement into our layer:
    Postgres backend stores it but doesn't return it from `query`.
 
 So we cannot read an ACL back out of a query result. Instead, the
-`AclKnowledgeStore` (in `smooth-operator-agent-core`, `src/access_control.rs`)
+`AclKnowledgeStore` (in `smooth-operator`, `src/access_control.rs`)
 wraps any inner `KnowledgeBase` and:
 
 - **records the document → ACL mapping at ingest** into a side table it owns
@@ -122,7 +122,7 @@ comma-joined `acl` field kept for debug visibility. See
 
 ## Tests
 
-`smooth-operator-agent-core/tests/access_control.rs`:
+`smooth-operator/tests/access_control.rs`:
 
 - **The cross-user leak test** (written first, failed before enforcement
   existed): three docs share a query term — `doc-a` (alice-only), `doc-b`

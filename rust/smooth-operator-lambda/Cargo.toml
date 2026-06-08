@@ -1,0 +1,50 @@
+[package]
+name = "smooai-smooth-operator-lambda"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "AWS Lambda handler for smooth-operator — serves the schema-driven protocol over API Gateway WebSocket, posting events back via the API Gateway Management API. State lives in DynamoDB + S3 Vectors."
+
+[[bin]]
+name = "bootstrap"
+path = "src/main.rs"
+
+[dependencies]
+smooth-operator = { workspace = true }
+smooai-smooth-operator-core = { workspace = true }
+# The DynamoDB single-table backend, with the S3 Vectors knowledge path enabled.
+smooai-smooth-operator-adapter-dynamodb = { path = "../adapters/dynamodb", features = [
+    "s3-vectors",
+] }
+# Reuse the reference server's wire-protocol builders (`protocol::*`) and the
+# streaming, memory-carrying turn runner (`runner::run_streaming_turn`). Only the
+# transport differs (Management API post-back vs. the axum socket sink), so the
+# turn LOGIC is shared verbatim rather than re-implemented.
+smooth-operator-server = { package = "smooai-smooth-operator-server", path = "../smooth-operator-server" }
+
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+tokio = { workspace = true }
+
+# Lambda runtime + API Gateway WebSocket event types.
+lambda_runtime = "0.13"
+aws_lambda_events = { version = "0.16", default-features = false, features = [
+    "apigw",
+] }
+
+# AWS clients: ambient config + the Management API for posting events back to
+# the WebSocket connection (API Gateway WS is request/response, not a socket).
+aws-config = "1"
+aws-sdk-apigatewaymanagement = "1"
+# Direct DynamoDB client for the `$connect`/`$disconnect` connection registry
+# (operational state, not a protocol domain entity — so it lives outside the
+# StorageAdapter trait, written via the adapter's exposed client + table).
+aws-sdk-dynamodb = "1"
+
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }

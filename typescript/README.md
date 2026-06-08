@@ -1,6 +1,6 @@
-# `@smooai/smooth-operator-agent`
+# `@smooai/smooth-operator`
 
-TypeScript protocol types and a native WebSocket client for the **smooth-operator-agent**
+TypeScript protocol types and a native WebSocket client for the **smooth-operator**
 protocol. This is the first polyglot client; it sets the pattern for the Go, .NET,
 and Python clients.
 
@@ -12,7 +12,7 @@ on top.
 ## Install
 
 ```bash
-pnpm add @smooai/smooth-operator-agent
+pnpm add @smooai/smooth-operator
 ```
 
 Requires Node ≥ 22, ESM only.
@@ -20,7 +20,7 @@ Requires Node ≥ 22, ESM only.
 ## Usage
 
 ```ts
-import { SmoothAgentClient } from '@smooai/smooth-operator-agent';
+import { SmoothAgentClient } from '@smooai/smooth-operator';
 
 const client = new SmoothAgentClient({ url: 'wss://realtime.example.dev' });
 await client.connect();
@@ -56,7 +56,7 @@ new SmoothAgentClient({ url, webSocketFactory: (u) => new WebSocket(u) });
 `ProtocolValidator` compiles the spec schemas with ajv and validates frames:
 
 ```ts
-import { ProtocolValidator } from '@smooai/smooth-operator-agent';
+import { ProtocolValidator } from '@smooai/smooth-operator';
 const v = await ProtocolValidator.load();
 v.validateEvent(incomingEvent); // { valid, errors }
 ```

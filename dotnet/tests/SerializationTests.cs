@@ -4,9 +4,9 @@
 // and the Session.threadId field — all of which a naive enum converter would mangle.
 
 using System.Text.Json;
-using SmooAI.SmoothOperatorAgent.Generated;
+using SmooAI.SmoothOperator.Generated;
 
-namespace SmooAI.SmoothOperatorAgent.Tests;
+namespace SmooAI.SmoothOperator.Tests;
 
 public sealed class SerializationTests
 {

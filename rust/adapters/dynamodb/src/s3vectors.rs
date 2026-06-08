@@ -23,7 +23,7 @@ use aws_sdk_s3vectors::types::{PutInputVector, VectorData};
 use aws_sdk_s3vectors::Client as S3VectorsClient;
 use aws_smithy_types::Document as SmithyDocument;
 
-use smooth_operator::{Document, KnowledgeResult};
+use smooth_operator_core::{Document, KnowledgeResult};
 
 /// Configuration for the S3 Vectors knowledge backend.
 #[derive(Debug, Clone)]

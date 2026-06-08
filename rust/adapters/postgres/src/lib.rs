@@ -9,7 +9,7 @@
 //!   (conversation idempotency, external-id participant resolve, cursor message
 //!   paging, session status/counts).
 //! - **Checkpoints**: smooth-operator's
-//!   [`PostgresCheckpointStore`](smooth_operator::PostgresCheckpointStore) (a
+//!   [`PostgresCheckpointStore`](smooth_operator_core::PostgresCheckpointStore) (a
 //!   *synchronous* r2d2-pooled store) constructed against the **same database**
 //!   — so the engine's `with_checkpoint_store` plugs straight in and agent state
 //!   lives next to the conversations it belongs to.
@@ -41,15 +41,15 @@ use chrono::Utc;
 use deadpool_postgres::{Config as PoolConfig, ManagerConfig, Pool, RecyclingMethod, Runtime};
 use tokio_postgres::NoTls;
 
-use smooth_operator::checkpoint::PostgresCheckpointStore;
-use smooth_operator::{CheckpointStore, KnowledgeBase};
-use smooth_operator_agent_core::adapter::{
+use smooth_operator::adapter::{
     ConversationUpdate, MessagePage, MessageQuery, SessionUpdate, StorageAdapter,
 };
-use smooth_operator_agent_core::domain::{
+use smooth_operator::domain::{
     Conversation, Direction, Message, MessageContent, Participant, ParticipantRef, ParticipantType,
     Platform, Session, SessionStatus,
 };
+use smooth_operator_core::checkpoint::PostgresCheckpointStore;
+use smooth_operator_core::{CheckpointStore, KnowledgeBase};
 
 // The shared embedding seam (trait + deterministic default) now lives in core;
 // re-export it here so existing `postgres::{Embedder, DeterministicEmbedder, …}`
@@ -57,7 +57,7 @@ use smooth_operator_agent_core::domain::{
 // 1536-d constant) is defined locally.
 pub use embedder::{GatewayEmbedder, OPENAI_SMALL_EMBEDDING_DIM};
 pub use knowledge::PgKnowledgeBase;
-pub use smooth_operator_agent_core::embedding::{
+pub use smooth_operator::embedding::{
     DeterministicEmbedder, Embedder, InputType, DEFAULT_EMBEDDING_DIM,
 };
 

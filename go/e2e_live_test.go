@@ -1,7 +1,7 @@
 // Package e2e holds the live, gateway-backed end-to-end test for the Go client.
 //
 // Unlike the unit tests under ./protocol (which drive an in-memory mock
-// transport), this test boots the REAL Rust smooth-operator-agent-server binary,
+// transport), this test boots the REAL Rust smooth-operator-server binary,
 // connects to it over a real WebSocket via the default WebSocketTransport, and
 // drives real LLM turns through the live SmooAI gateway.
 //
@@ -33,7 +33,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SmooAI/smooth-operator-agent/go/protocol"
+	"github.com/SmooAI/smooth-operator/go/protocol"
 )
 
 const (
@@ -43,10 +43,10 @@ const (
 	e2eURL  = "ws://" + e2eAddr + "/ws"
 
 	// serverBin is the prebuilt Rust server binary. If missing, build with:
-	//   cargo build -p smooai-smooth-operator-agent-server \
-	//     --bin smooth-operator-agent-server
+	//   cargo build -p smooai-smooth-operator-server \
+	//     --bin smooth-operator-server
 	// (run from rust/).
-	serverBinRelHome = ".cargo/shared-target/debug/smooth-operator-agent-server"
+	serverBinRelHome = ".cargo/shared-target/debug/smooth-operator-server"
 
 	// turnTimeout bounds a single live LLM turn (gateway + tool loop can be slow).
 	turnTimeout = 120 * time.Second
@@ -78,7 +78,7 @@ func serverBinPath(t *testing.T) string {
 	path := home + "/" + serverBinRelHome
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("server binary not found at %s — build it with:\n"+
-			"  cargo build -p smooai-smooth-operator-agent-server --bin smooth-operator-agent-server\n"+
+			"  cargo build -p smooai-smooth-operator-server --bin smooth-operator-server\n"+
 			"(from rust/): %v", path, err)
 	}
 	return path

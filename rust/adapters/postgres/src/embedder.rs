@@ -2,7 +2,7 @@
 //!
 //! The provider-agnostic [`Embedder`] trait, [`InputType`], the network-free
 //! [`DeterministicEmbedder`], and [`DEFAULT_EMBEDDING_DIM`] all live in
-//! [`smooth_operator_agent_core::embedding`] — the one shared home so the
+//! [`smooth_operator::embedding`] — the one shared home so the
 //! Postgres adapter and the ingestion pipeline embed text identically (same
 //! FNV-1a hashing, same L2 normalization, same vectors). This module only holds
 //! the adapter-specific [`GatewayEmbedder`]: an OpenAI-compatible
@@ -29,7 +29,7 @@
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 
-use smooth_operator_agent_core::embedding::{Embedder, InputType};
+use smooth_operator::embedding::{Embedder, InputType};
 
 /// Dimension returned by OpenAI `text-embedding-3-small`.
 pub const OPENAI_SMALL_EMBEDDING_DIM: usize = 1536;

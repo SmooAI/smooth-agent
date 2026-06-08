@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# Multi-stage image for the smooth-operator-agent WebSocket server.
+# Multi-stage image for the smooth-operator WebSocket server.
 #
 # ──────────────────────────────────────────────────────────────────────────
 #  CROSS-REPO BUILD CONTEXT (read this before `docker build`)
@@ -8,40 +8,40 @@
 # The Rust workspace (`rust/Cargo.toml`) has a *path* dependency on a SIBLING
 # repository that lives OUTSIDE this repo:
 #
-#     smooai-smooth-operator = { path = "../../smooth-operator/rust/smooth-operator" }
+#     smooai-smooth-operator-core = { path = "../../smooth-operator-core/rust/smooth-operator-core" }
 #
 # Relative to the workspace at `rust/`, that resolves to
-# `<repo-parent>/smooth-operator/rust/smooth-operator`. A Docker build context
+# `<repo-parent>/smooth-operator-core/rust/smooth-operator-core`. A Docker build context
 # rooted at this repo alone therefore CANNOT see it and the build will fail at
 # the `cargo build` step with an unresolved path dependency.
 #
-# Until `smooai-smooth-operator` is published to crates.io (roadmap Phase 0,
+# Until `smooai-smooth-operator-core` is published to crates.io (roadmap Phase 0,
 # which removes the path dep), the image MUST be built with a context that spans
 # BOTH repos. Lay them out as siblings (the standard `~/dev/smooai/` layout):
 #
 #     <parent>/
-#       ├── smooth-operator-agent/     (this repo)
-#       └── smooth-operator/           (the engine; sibling)
+#       ├── smooth-operator/        (this repo)
+#       └── smooth-operator-core/   (the engine; sibling)
 #
 # then build from the PARENT directory, pointing -f at this Dockerfile:
 #
 #     docker build \
-#       -f smooth-operator-agent/Dockerfile \
-#       -t smooth-operator-agent:dev \
+#       -f smooth-operator/Dockerfile \
+#       -t smooth-operator:dev \
 #       <parent>
 #
 # i.e. from `~/dev/smooai`:
 #
-#     docker build -f smooth-operator-agent/Dockerfile -t smooth-operator-agent:dev .
+#     docker build -f smooth-operator/Dockerfile -t smooth-operator:dev .
 #
-# Inside the build the two repos appear at `/src/smooth-operator-agent` and
-# `/src/smooth-operator`, preserving the `../../smooth-operator/...` relative
+# Inside the build the two repos appear at `/src/smooth-operator` and
+# `/src/smooth-operator-core`, preserving the `../../smooth-operator-core/...` relative
 # path the workspace expects. See deploy/k8s/README.md for the full story.
 #
-# Once `smooai-smooth-operator` is on crates.io and `rust/Cargo.toml` switches
+# Once `smooai-smooth-operator-core` is on crates.io and `rust/Cargo.toml` switches
 # the workspace dep to a version, this Dockerfile can be simplified to a
-# single-repo context (`docker build -t … smooth-operator-agent`) by dropping
-# the sibling COPY and the `WORKDIR /src/smooth-operator-agent/rust` can build
+# single-repo context (`docker build -t … smooth-operator`) by dropping
+# the sibling COPY and the `WORKDIR /src/smooth-operator/rust` can build
 # directly.
 # ──────────────────────────────────────────────────────────────────────────
 
@@ -64,17 +64,17 @@ RUN apt-get update \
 WORKDIR /src
 
 # Copy BOTH repos (the context spans the parent dir — see header). Order:
-# sibling engine first, then this repo, so the `../../smooth-operator` path dep
-# resolves from `/src/smooth-operator-agent/rust`.
+# sibling engine first, then this repo, so the `../../smooth-operator-core` path dep
+# resolves from `/src/smooth-operator/rust`.
+COPY smooth-operator-core/ /src/smooth-operator-core/
 COPY smooth-operator/ /src/smooth-operator/
-COPY smooth-operator-agent/ /src/smooth-operator-agent/
 
-WORKDIR /src/smooth-operator-agent/rust
+WORKDIR /src/smooth-operator/rust
 
 # Build only the server binary in release mode.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo build --release --locked -p smooai-smooth-operator-agent-server \
-    && cp target/release/smooth-operator-agent-server /smooth-operator-agent-server
+    cargo build --release --locked -p smooai-smooth-operator-server \
+    && cp target/release/smooth-operator-server /smooth-operator-server
 
 # ── Runtime ────────────────────────────────────────────────────────────────
 # Slim Debian with ca-certificates so the server can reach the HTTPS LLM
@@ -89,7 +89,7 @@ RUN apt-get update \
 RUN groupadd --system --gid 10001 smooth \
     && useradd --system --uid 10001 --gid smooth --no-create-home --shell /usr/sbin/nologin smooth
 
-COPY --from=builder /smooth-operator-agent-server /usr/local/bin/smooth-operator-agent-server
+COPY --from=builder /smooth-operator-server /usr/local/bin/smooth-operator-server
 
 USER 10001:10001
 
@@ -99,4 +99,4 @@ USER 10001:10001
 ENV SMOOTH_AGENT_PORT=8787
 EXPOSE 8787
 
-ENTRYPOINT ["/usr/local/bin/smooth-operator-agent-server"]
+ENTRYPOINT ["/usr/local/bin/smooth-operator-server"]

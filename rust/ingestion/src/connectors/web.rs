@@ -18,7 +18,7 @@
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 
-use smooth_operator_agent_core::tools::fetch_url::{assert_url_is_public, html_to_text};
+use smooth_operator::tools::fetch_url::{assert_url_is_public, html_to_text};
 
 use crate::connector::{Connector, RawDocument, Timestamp};
 
@@ -83,10 +83,7 @@ impl Connector for WebConnector {
         let resp = self
             .client
             .get(url.clone())
-            .header(
-                reqwest::header::USER_AGENT,
-                "smooth-operator-agent/web-connector",
-            )
+            .header(reqwest::header::USER_AGENT, "smooth-operator/web-connector")
             .send()
             .await
             .map_err(|e| anyhow!("web connector request failed for {url}: {e}"))?;
@@ -188,7 +185,7 @@ mod tests {
     // ---- gated: real network fetch (skips credential-free) ----------------
 
     /// Live fetch — only runs with `SMOOTH_AGENT_E2E=1` (network). Run with:
-    /// `SMOOTH_AGENT_E2E=1 cargo test -p smooai-smooth-operator-agent-ingestion \
+    /// `SMOOTH_AGENT_E2E=1 cargo test -p smooai-smooth-operator-ingestion \
     ///    --lib web::tests::live_fetch_example -- --ignored --nocapture`
     #[tokio::test]
     #[ignore = "network: gated on SMOOTH_AGENT_E2E"]

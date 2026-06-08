@@ -1,6 +1,6 @@
 # Onyx testing & feature gap analysis (TDD plan)
 
-A review of how [Onyx](https://github.com/onyx-dot-app/onyx) tests, what it has that `smooth-operator-agent` does not, and a **test-driven** plan to close the gaps. **Policy: every gap below is closed test-first — write the failing test, then the implementation.**
+A review of how [Onyx](https://github.com/onyx-dot-app/onyx) tests, what it has that `smooth-operator` does not, and a **test-driven** plan to close the gaps. **Policy: every gap below is closed test-first — write the failing test, then the implementation.**
 
 ## 1. How Onyx tests
 
@@ -59,7 +59,7 @@ Onyx has a `regression/` layer + nightly LLM-provider-chat. We're adding LLM-jud
 
 ### G5. Frontend e2e (Playwright) for the chat widget
 Onyx has 115 web tests + `pr-playwright-tests`. Our new `SmooAI/chat-widget` has none yet.
-- **TDD**: a Playwright spec first — load the widget against a locally-booted `smooth-operator-agent-server`, send a message, assert streamed assistant tokens render + a grounded answer appears. Wire it into the widget repo's CI.
+- **TDD**: a Playwright spec first — load the widget against a locally-booted `smooth-operator-server`, send a message, assert streamed assistant tokens render + a grounded answer appears. Wire it into the widget repo's CI.
 
 ### G6. Deployment-integration tests in CI
 Onyx runs compose + k8s + helm tests in CI; we only `helm lint`/`helm template`.

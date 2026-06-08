@@ -25,12 +25,12 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 
-use smooth_operator::{Document, DocumentType, KnowledgeBase};
-use smooth_operator_agent_core::access_control::DocAcl;
+use smooth_operator::access_control::DocAcl;
+use smooth_operator_core::{Document, DocumentType, KnowledgeBase};
 
 use crate::chunker::{Chunk, Chunker};
 use crate::connector::{Connector, Timestamp};
-use smooth_operator_agent_core::embedding::{Embedder, InputType};
+use smooth_operator::embedding::{Embedder, InputType};
 
 /// Durable dedup state for idempotent ingest.
 ///
@@ -296,8 +296,8 @@ fn store_chunk(
 mod tests {
     use super::*;
     use crate::connector::{MockConnector, RawDocument};
-    use smooth_operator::InMemoryKnowledge;
-    use smooth_operator_agent_core::embedding::DeterministicEmbedder;
+    use smooth_operator::embedding::DeterministicEmbedder;
+    use smooth_operator_core::InMemoryKnowledge;
 
     fn kb() -> Arc<dyn KnowledgeBase> {
         Arc::new(InMemoryKnowledge::new())

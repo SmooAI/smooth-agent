@@ -1,6 +1,6 @@
-# The smooth-operator-agent protocol
+# The smooth-operator protocol
 
-A **schema-driven WebSocket protocol**. It is the single contract between any client and any smooth-operator-agent service, in any language. It is lifted from the smooai monorepo's `@smooai/realtime` package and made language-neutral so the JSON Schemas in [`spec/`](../spec) generate native types for TypeScript, Go, C#/.NET, and Python.
+A **schema-driven WebSocket protocol**. It is the single contract between any client and any smooth-operator service, in any language. It is lifted from the smooai monorepo's `@smooai/realtime` package and made language-neutral so the JSON Schemas in [`spec/`](../spec) generate native types for TypeScript, Go, C#/.NET, and Python.
 
 > Why protocol-first: `.NET` is a first-class target and the agent core is async + streaming-heavy. Rather than bet streaming FFI codegen on immature .NET/Go generators, the protocol is the spine — each language ships an idiomatic native client. In-process FFI is an optimization, not a requirement.
 

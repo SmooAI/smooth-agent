@@ -2,14 +2,14 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "smooth-operator-agent.fullname" . }}
+  name: {{ include "smooth-operator.fullname" . }}
   labels:
-    {{- include "smooth-operator-agent.labels" . | nindent 4 }}
+    {{- include "smooth-operator.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "smooth-operator-agent.fullname" . }}
+    name: {{ include "smooth-operator.fullname" . }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:

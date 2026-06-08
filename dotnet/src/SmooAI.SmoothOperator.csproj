@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>SmooAI.SmoothOperator</RootNamespace>
+    <AssemblyName>SmooAI.SmoothOperator</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Runtime validation of events/actions against the spec JSON Schemas. -->
+    <PackageReference Include="NJsonSchema" Version="11.6.1" />
+    <!-- Microsoft.Extensions.AI (MEAI) ecosystem interop: IChatClient / ChatMessage / ChatResponse(Update). -->
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="9.7.1" />
+    <!-- DI extensions for AddSmoothAgent(...). -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.7" />
+  </ItemGroup>
+
+</Project>

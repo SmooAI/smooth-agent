@@ -15,7 +15,7 @@
 > up the change before typechecking.
 
 SST v4 app that consumes the shared `@smooai/deploy` `SmoothAgentApi` construct,
-which provisions the AWS-serverless backend for `smooth-operator-agent`:
+which provisions the AWS-serverless backend for `smooth-operator`:
 
 | Resource | SST component | Notes |
 | --- | --- | --- |
@@ -26,7 +26,7 @@ which provisions the AWS-serverless backend for `smooth-operator-agent`:
 | Vectors | S3 Vectors (out-of-band — see below) | Per-org dense-retrieval index |
 | Gateway key | `sst.Secret` (`SmoothAgentGatewayKey`) | See "Secrets" below |
 
-The Lambda is the `smooai-smooth-operator-agent-lambda` crate (`rust/smooth-operator-agent-lambda/`). It speaks the schema-driven protocol (`spec/`) over API Gateway WebSocket. Because API Gateway WS invokes the function **once per message** (no persistent socket), the Lambda posts events **back** to the client via the **API Gateway Management API** (`post_to_connection`), and keeps **no** in-process state across invocations — all state lives in DynamoDB + S3 Vectors.
+The Lambda is the `smooai-smooth-operator-lambda` crate (`rust/smooth-operator-lambda/`). It speaks the schema-driven protocol (`spec/`) over API Gateway WebSocket. Because API Gateway WS invokes the function **once per message** (no persistent socket), the Lambda posts events **back** to the client via the **API Gateway Management API** (`post_to_connection`), and keeps **no** in-process state across invocations — all state lives in DynamoDB + S3 Vectors.
 
 ---
 
@@ -46,18 +46,18 @@ cargo install cargo-lambda
 
 # From the Rust workspace root:
 cd ../../rust
-cargo lambda build --release --arm64 -p smooai-smooth-operator-agent-lambda
+cargo lambda build --release --arm64 -p smooai-smooth-operator-lambda
 ```
 
 This produces:
 
 ```
-rust/target/lambda/smooai-smooth-operator-agent-lambda/bootstrap
+rust/target/lambda/smooai-smooth-operator-lambda/bootstrap
 ```
 
 …which is exactly the `ARTIFACT_DIR` the SST `Function` `handler` points at (with `runtime: 'provided.al2023'`, `architecture: 'arm64'`). The crate's `[[bin]]` is named `bootstrap` so the artifact matches the `provided.al2023` contract.
 
-> The crate also builds for the host target with a plain `cargo build -p smooai-smooth-operator-agent-lambda` (useful for CI compile checks); only the **deploy** artifact needs the `cargo lambda` cross-build.
+> The crate also builds for the host target with a plain `cargo build -p smooai-smooth-operator-lambda` (useful for CI compile checks); only the **deploy** artifact needs the `cargo lambda` cross-build.
 
 ## 2. Install SST + generate platform types
 
@@ -127,7 +127,7 @@ to brute-force cosine over DynamoDB — no S3 Vectors required for dev/lower env
 
 ```bash
 # 1. Rust Lambda compiles (host target is fine for CI compile checks).
-( cd ../../rust && cargo build -p smooai-smooth-operator-agent-lambda )
+( cd ../../rust && cargo build -p smooai-smooth-operator-lambda )
 
 # 2. SST config typechecks.
 pnpm install && pnpm sst install && pnpm typecheck
