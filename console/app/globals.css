@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+html,
+body {
+    @apply bg-ink-950 text-slate-200 antialiased;
+    min-height: 100%;
+}
+
+@layer components {
+    .card {
+        @apply rounded-xl border border-ink-700 bg-ink-850 p-5 shadow-lg shadow-black/20;
+    }
+    .card-title {
+        @apply text-xs font-semibold uppercase tracking-wider text-slate-400;
+    }
+    .stat {
+        @apply mt-2 text-3xl font-semibold text-white;
+    }
+    .badge {
+        @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+    }
+    .nav-link {
+        @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition hover:bg-ink-800 hover:text-white;
+    }
+    .nav-link-active {
+        @apply bg-ink-800 text-white;
+    }
+    .th {
+        @apply px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400;
+    }
+    .td {
+        @apply whitespace-nowrap px-4 py-3 text-sm text-slate-300;
+    }
+    .btn {
+        @apply inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-ink-950 transition hover:bg-accent-soft disabled:opacity-50;
+    }
+    .btn-ghost {
+        @apply inline-flex items-center justify-center rounded-lg border border-ink-600 px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:bg-ink-800;
+    }
+}
