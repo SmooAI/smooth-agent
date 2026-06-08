@@ -21,6 +21,7 @@
 
 pub mod access_control;
 pub mod adapter;
+pub mod auth;
 pub mod curation;
 pub mod domain;
 pub mod embedding;
@@ -31,6 +32,10 @@ pub mod tools;
 
 pub use access_control::{AccessContext, AclKnowledgeStore, DocAcl};
 pub use adapter::{ConversationUpdate, MessagePage, MessageQuery, SessionUpdate, StorageAdapter};
+pub use auth::{
+    AuthConfig, AuthError, AuthVerifier, JwtVerifier, NoAuthVerifier, Principal, Role,
+    SmooIdentityVerifier,
+};
 pub use curation::{
     with_boost, with_document_set, CuratedKnowledgeStore, DocMeta, RetrievalFilter, DEFAULT_BOOST,
 };

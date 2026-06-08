@@ -21,6 +21,9 @@
 //!   smooth-operator [`Agent`](smooth_operator_core::Agent).
 //! - [`server`] — the axum app + per-connection socket loop. [`server::bind`]
 //!   and [`server::router`] let tests boot the service in-process.
+//! - [`admin`] — the auth-gated admin HTTP API (Phase 12) mounted under
+//!   `/admin`: whoami, chat history, indexing status, document sets. Consumed by
+//!   the Next.js management console (increment 2). See `docs/ADMIN-API.md`.
 //!
 //! ## Env contract (reused by every language's E2E harness)
 //!
@@ -28,6 +31,7 @@
 //! `SMOOTH_AGENT_PORT`, `SMOOAI_GATEWAY_URL`, `SMOOAI_GATEWAY_KEY`,
 //! `SMOOTH_AGENT_MODEL`, `SMOOTH_AGENT_SEED_KB`.
 
+pub mod admin;
 pub mod config;
 pub mod handler;
 pub mod protocol;
@@ -36,5 +40,5 @@ pub mod server;
 pub mod state;
 
 pub use config::ServerConfig;
-pub use server::{bind, build_state, router, run};
+pub use server::{bind, build_state, build_state_from_env, router, run};
 pub use state::AppState;

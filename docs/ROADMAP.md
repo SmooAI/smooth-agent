@@ -107,8 +107,8 @@ Recurring principle: **"Smoo-powered or bring-your-own"** — hosted lom.smoo.ai
 
 ## Phase 12 — Management UI + Auth/RBAC
 
-- ⬜ **Next.js management app** (connector config, document sets, chat history, indexing status, settings) on `sst.aws.Nextjs` (OpenNext→Lambda) or containerized.
-- ⬜ **Auth** — Smoo identity (hosted) OR BYO **SST OpenAuth** (`@openauthjs/openauth` + `sst.aws.Auth`; OIDC/OAuth/password, SAML via OIDC bridge). **RBAC** roles (admin/curator/basic) on org scoping + `DocAcl`.
+- ⬜ **Next.js management app** (connector config, document sets, chat history, indexing status, settings) on `sst.aws.Nextjs` (OpenNext→Lambda) or containerized. *(increment 2 — consumes the admin API below.)*
+- ✅ **Auth + admin API (increment 1)** — `Role` (admin/curator/basic, ordered) + `Principal` + the `AuthVerifier` seam with three modes: BYO **SST OpenAuth** JWT (`AUTH_MODE=jwt`, HS256 + RS256), **Smoo identity** (`AUTH_MODE=smoo`, hosted; live-introspection stubbed), and dev-only `NoAuthVerifier` (`AUTH_MODE=none`). Secure-by-default (`jwt` default; keyless `jwt`/`smoo` refuses to start — never silent no-auth). Auth-gated admin HTTP API on the axum service (`/admin/me`, `/admin/conversations`(+`/{id}/messages`), `/admin/indexing/runs`, `/admin/document-sets`, public `/admin/health`) with org-scoping + "Basic sees own". See [ADMIN-API.md](ADMIN-API.md). RBAC layers on org scoping + `DocAcl`.
 
 ## Phase 13 — Answer bots
 

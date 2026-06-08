@@ -33,38 +33,75 @@ use crate::handler;
 use crate::state::AppState;
 
 /// Build the axum [`Router`] for the given application state. Exposed so tests
-/// can boot the server in-process.
+/// can boot the server in-process. Serves the WebSocket `/ws` endpoint plus the
+/// auth-gated admin HTTP API under `/admin` (see [`crate::admin`]).
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/ws", get(ws_upgrade))
+        .merge(crate::admin::router())
         .with_state(state)
 }
 
+/// The document set the seeded demo docs are tagged into, so
+/// `GET /admin/document-sets` has something to report in a seeded server.
+const SEED_DOCUMENT_SET: &str = "policies";
+
 /// Build an [`AppState`] over a fresh in-memory adapter, seeding the knowledge
 /// base when `config.seed_kb` is set. Exposed for tests + the binary.
+///
+/// The auth verifier defaults to [`NoAuthVerifier`](smooth_operator::auth::NoAuthVerifier)
+/// here (the protocol-only path needs no auth); the **binary** path
+/// ([`build_state_from_env`]) installs the env-configured, secure-by-default
+/// verifier instead.
 #[must_use]
 pub fn build_state(config: ServerConfig) -> AppState {
+    let seed = config.seed_kb;
     let storage = Arc::new(InMemoryStorageAdapter::new());
-    if config.seed_kb {
+    let state = AppState::new(storage.clone(), config);
+    if seed {
         seed_knowledge(storage.as_ref());
+        // Record the seeded docs' document-set membership for the admin API
+        // (the in-memory backend drops document metadata, so the registry is the
+        // source of truth for set names + counts).
+        state.record_document_set(SEED_DOCUMENT_SET);
+        state.record_document_set(SEED_DOCUMENT_SET);
     }
-    AppState::new(storage, config)
+    state
+}
+
+/// Build an [`AppState`] with the **env-configured** auth verifier (secure by
+/// default — see [`smooth_operator::auth::AuthConfig`]). Used by the binary.
+///
+/// # Errors
+/// Returns an error if the auth configuration is invalid (e.g. `AUTH_MODE=jwt`
+/// with no key) — the server refuses to start rather than fall back to no-auth.
+pub fn build_state_from_env(config: ServerConfig) -> Result<AppState> {
+    let verifier = smooth_operator::auth::AuthConfig::from_env()
+        .map_err(|e| anyhow::anyhow!("auth configuration error: {e}"))?;
+    Ok(build_state(config).with_auth(Arc::from(verifier)))
 }
 
 /// Seed a couple of distinctive demo docs so knowledge-grounded E2E is
 /// deterministic. The 17-day return window is deliberately unusual so an
-/// ungrounded answer can't accidentally match it.
+/// ungrounded answer can't accidentally match it. Both docs are tagged into the
+/// `policies` document set so the admin API can report it.
 pub fn seed_knowledge(storage: &InMemoryStorageAdapter) {
     let kb = smooth_operator::adapter::StorageAdapter::knowledge(storage);
-    let _ = kb.ingest(Document::new(
-        "SmooAI's return window is exactly 17 days from delivery. Returns after 17 days are not accepted.",
-        "policies/returns.md",
-        DocumentType::Documentation,
+    let _ = kb.ingest(smooth_operator::with_document_set(
+        Document::new(
+            "SmooAI's return window is exactly 17 days from delivery. Returns after 17 days are not accepted.",
+            "policies/returns.md",
+            DocumentType::Documentation,
+        ),
+        [SEED_DOCUMENT_SET],
     ));
-    let _ = kb.ingest(Document::new(
-        "SmooAI standard shipping takes 5 to 7 business days. Expedited shipping takes 2 business days.",
-        "policies/shipping.md",
-        DocumentType::Documentation,
+    let _ = kb.ingest(smooth_operator::with_document_set(
+        Document::new(
+            "SmooAI standard shipping takes 5 to 7 business days. Expedited shipping takes 2 business days.",
+            "policies/shipping.md",
+            DocumentType::Documentation,
+        ),
+        [SEED_DOCUMENT_SET],
     ));
 }
 
@@ -72,15 +109,19 @@ pub fn seed_knowledge(storage: &InMemoryStorageAdapter) {
 /// process is killed. Returns the bound [`TcpListener`] + the router, used by
 /// both the binary and tests (tests bind port 0 for an ephemeral port).
 ///
+/// Uses the **env-configured, secure-by-default** auth verifier
+/// ([`build_state_from_env`]) — the binary refuses to start if auth is
+/// misconfigured rather than silently serving the admin API unauthenticated.
+///
 /// # Errors
-/// Returns an error if the TCP bind fails.
+/// Returns an error if the auth configuration is invalid or the TCP bind fails.
 pub async fn bind(config: ServerConfig) -> Result<(TcpListener, Router)> {
     let ip: std::net::IpAddr = config
         .bind
         .parse()
         .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST));
     let addr = SocketAddr::new(ip, config.port);
-    let state = build_state(config);
+    let state = build_state_from_env(config)?;
     let app = router(state);
     let listener = TcpListener::bind(addr)
         .await

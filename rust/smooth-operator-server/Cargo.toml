@@ -17,6 +17,8 @@ path = "src/main.rs"
 smooth-operator = { workspace = true }
 smooai-smooth-operator-core = { workspace = true }
 smooai-smooth-operator-adapter-memory = { path = "../adapters/in-memory" }
+# Admin API surfaces indexing-run status via the ingestion crate's IndexingStore.
+smooai-smooth-operator-ingestion = { path = "../ingestion" }
 
 async-trait = { workspace = true }
 anyhow = { workspace = true }
@@ -34,3 +36,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 [dev-dependencies]
 tokio-tungstenite = "0.26"
 futures-util = "0.3"
+# Admin-API integration tests drive the axum router in-process via
+# `tower::ServiceExt::oneshot` and read response bodies with `http-body-util`.
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+# Sign HS256 test tokens to exercise the real JwtVerifier through the routes.
+jsonwebtoken = { workspace = true }
