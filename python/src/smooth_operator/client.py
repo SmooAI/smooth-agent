@@ -58,6 +58,18 @@ class RequestTimeoutError(Exception):
         self.request_id = request_id
 
 
+class TurnTimeoutError(Exception):
+    """A streaming turn received no terminal ``eventual_response`` / ``error`` within
+    the configured turn timeout. The turn settles with this (``await turn`` raises it
+    and ``async for`` over it re-raises it) so a stuck server can't hang the caller."""
+
+    def __init__(self, request_id: str, seconds: float) -> None:
+        super().__init__(
+            f"Turn {request_id} timed out after {seconds}s without a terminal response"
+        )
+        self.request_id = request_id
+
+
 class MessageTurn:
     """A streaming message turn.
 
@@ -74,14 +86,36 @@ class MessageTurn:
     iteration begins are preserved.
     """
 
-    def __init__(self, request_id: str, on_close: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        request_id: str,
+        on_close: Callable[[], None],
+        turn_timeout: float = 0.0,
+    ) -> None:
         self.request_id = request_id
         self._on_close = on_close
+        self._turn_timeout = turn_timeout
+        # asyncio.Queue / asyncio.Event bind to the running loop lazily on first use,
+        # so they need no explicit loop capture. The settled future, however, is bound
+        # at construction — use get_running_loop() so it attaches to the loop that is
+        # actually running (the client is async-only; send_message is always called
+        # from within a running loop). get_event_loop() could otherwise return / create
+        # a *different* loop that never runs, leaving the future (and any `await turn`)
+        # to hang silently.
         self._queue: asyncio.Queue[ServerEvent] = asyncio.Queue()
         self._done = asyncio.Event()
         self._final: EventualResponse | None = None
         self._error: BaseException | None = None
-        self._settled = asyncio.get_event_loop().create_future()
+        loop = asyncio.get_running_loop()
+        self._settled: asyncio.Future[EventualResponse] = loop.create_future()
+        # Avoid "Future exception was never retrieved" noise when the caller only
+        # iterates (and surfaces the error via __aiter__) and never awaits the turn.
+        self._settled.add_done_callback(lambda f: f.cancelled() or f.exception())
+        # Bound the turn: a server that accepts send_message but never emits a terminal
+        # event must not hang the caller forever.
+        self._timeout_handle: asyncio.TimerHandle | None = None
+        if turn_timeout > 0:
+            self._timeout_handle = loop.call_later(turn_timeout, self._on_timeout)
 
     # ── feed (called by the client dispatcher) ─────────────────────────────────
     def push(self, event: ServerEvent) -> None:
@@ -105,9 +139,20 @@ class MessageTurn:
             return
         self._finish(None, err)
 
+    def _on_timeout(self) -> None:
+        """Settle the turn with a TurnTimeoutError when no terminal event arrived."""
+        if self._done.is_set():
+            return
+        self._finish(
+            None, TurnTimeoutError(self.request_id, self._turn_timeout)
+        )
+
     def _finish(self, final: EventualResponse | None, err: BaseException | None) -> None:
         if self._done.is_set():
             return
+        if self._timeout_handle is not None:
+            self._timeout_handle.cancel()
+            self._timeout_handle = None
         self._final = final
         self._error = err
         self._done.set()
@@ -168,9 +213,12 @@ class SmoothAgentClient:
         transport: Transport | None = None,
         generate_request_id: Callable[[], str] | None = None,
         request_timeout: float = 30.0,
+        turn_timeout: float = 120.0,
     ) -> None:
         self._transport = transport if transport is not None else WebSocketTransport(url)
         self._request_timeout = request_timeout
+        # Overall timeout (seconds) for a streaming send_message turn. 0 disables it.
+        self._turn_timeout = turn_timeout
         self._generate_request_id = generate_request_id or (lambda: f"req-{uuid.uuid4()}")
 
         # requestId → Future for single-response requests (create_session, ping, …).
@@ -272,7 +320,11 @@ class SmoothAgentClient:
         immediately so the caller can start iterating.
         """
         request_id = self._generate_request_id()
-        turn = MessageTurn(request_id, lambda: self._turns.pop(request_id, None))
+        turn = MessageTurn(
+            request_id,
+            lambda: self._turns.pop(request_id, None),
+            turn_timeout=self._turn_timeout,
+        )
         self._turns[request_id] = turn
         try:
             self._transport.send(
@@ -325,7 +377,10 @@ class SmoothAgentClient:
     async def _request(self, action: dict) -> ServerEvent:
         request_id = action.get("requestId") or self._generate_request_id()
         frame = {**action, "requestId": request_id}
-        loop = asyncio.get_event_loop()
+        # Bind the response future to the *running* loop (the client is async-only and
+        # _request is always awaited). get_event_loop() can hand back a non-running
+        # loop, leaving this future to never resolve — a silent hang.
+        loop = asyncio.get_running_loop()
         fut: asyncio.Future[ServerEvent] = loop.create_future()
         self._pending[request_id] = fut
 

@@ -14,9 +14,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
+
+// DefaultTurnTimeout bounds a streaming send_message turn: if the server accepts the
+// message but never emits a terminal eventual_response / error within this window,
+// the turn settles with a *TurnTimeoutError instead of hanging forever. Override via
+// Options.TurnTimeout (set it to a negative value to disable).
+const DefaultTurnTimeout = 120 * time.Second
 
 // Client is a transport-agnostic smooth-operator protocol client.
 //
@@ -26,6 +33,7 @@ import (
 type Client struct {
 	transport     Transport
 	generateReqID func() string
+	turnTimeout   time.Duration
 
 	mu        sync.Mutex
 	pending   map[string]*pendingRequest // single-response actions
@@ -45,6 +53,9 @@ type Options struct {
 	Transport Transport
 	// GenerateRequestID overrides request ID generation. Defaults to "req-" + UUIDv4.
 	GenerateRequestID func() string
+	// TurnTimeout bounds a streaming send_message turn (see DefaultTurnTimeout).
+	// Zero uses DefaultTurnTimeout; a negative value disables the turn timeout.
+	TurnTimeout time.Duration
 }
 
 // New constructs a Client. It does not open the transport; call Connect.
@@ -56,9 +67,17 @@ func New(opts Options) (*Client, error) {
 	if gen == nil {
 		gen = func() string { return "req-" + uuid.NewString() }
 	}
+	turnTimeout := opts.TurnTimeout
+	switch {
+	case turnTimeout == 0:
+		turnTimeout = DefaultTurnTimeout
+	case turnTimeout < 0:
+		turnTimeout = 0 // disabled
+	}
 	return &Client{
 		transport:     opts.Transport,
 		generateReqID: gen,
+		turnTimeout:   turnTimeout,
 		pending:       make(map[string]*pendingRequest),
 		turns:         make(map[string]*MessageTurn),
 		listeners:     make(map[int]func(ServerEvent)),
@@ -192,7 +211,7 @@ type SendMessageParams struct {
 // block for the terminal eventual_response.
 func (c *Client) SendMessage(p SendMessageParams) *MessageTurn {
 	requestID := c.generateReqID()
-	turn := newMessageTurn(requestID, func() { c.removeTurn(requestID) })
+	turn := newMessageTurn(requestID, c.turnTimeout, func() { c.removeTurn(requestID) })
 
 	c.mu.Lock()
 	if c.closed {

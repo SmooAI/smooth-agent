@@ -43,6 +43,9 @@ const WS_CONNECTING = 0;
 const WS_OPEN = 1;
 const WS_CLOSING = 2;
 
+/** Default connect timeout (ms) for the WebSocket transport. */
+const DEFAULT_CONNECT_TIMEOUT = 30_000;
+
 /**
  * Default transport backed by a `WebSocket`-like object. By default it uses the
  * global `WebSocket`; pass a `factory` to inject one (e.g. the `ws` package on
@@ -52,12 +55,14 @@ export class WebSocketTransport implements Transport {
     private socket: WebSocketLike | null = null;
     private readonly url: string;
     private readonly factory: WebSocketFactory;
+    private readonly connectTimeout: number;
     private readonly messageHandlers = new Set<(data: string) => void>();
     private readonly closeHandlers = new Set<(info: { code?: number; reason?: string }) => void>();
     private readonly errorHandlers = new Set<(err: unknown) => void>();
 
-    constructor(url: string, factory?: WebSocketFactory) {
+    constructor(url: string, factory?: WebSocketFactory, connectTimeout = DEFAULT_CONNECT_TIMEOUT) {
         this.url = url;
+        this.connectTimeout = connectTimeout;
         if (factory) {
             this.factory = factory;
         } else {
@@ -87,19 +92,74 @@ export class WebSocketTransport implements Transport {
     connect(): Promise<void> {
         if (this.socket && this.socket.readyState === WS_OPEN) return Promise.resolve();
 
+        // A prior socket that never reached OPEN (failed/half-open dial, or a closed
+        // socket from a previous attempt) would otherwise be orphaned: its listeners
+        // stay registered and keep dispatching into the shared handler sets, so a late
+        // message/close from the dead socket double-fires. Close it and detach it
+        // before dialing a fresh one. (WebSocketLike has no removeEventListener, so we
+        // also guard every handler below with an identity check on `this.socket`.)
+        if (this.socket && this.socket.readyState !== WS_OPEN) {
+            const stale = this.socket;
+            this.socket = null;
+            try {
+                stale.close();
+            } catch {
+                // ignore — best-effort teardown of a half-open socket
+            }
+        }
+
         return new Promise<void>((resolve, reject) => {
             const socket = this.factory(this.url);
             this.socket = socket;
 
-            socket.addEventListener('open', () => resolve());
+            let settled = false;
+            const timer =
+                this.connectTimeout > 0
+                    ? setTimeout(() => {
+                          if (settled) return;
+                          settled = true;
+                          // Tear down the half-open socket so it can't leak / fire later.
+                          if (this.socket === socket) this.socket = null;
+                          try {
+                              socket.close();
+                          } catch {
+                              // ignore
+                          }
+                          reject(new Error(`WebSocket connect to ${this.url} timed out after ${this.connectTimeout}ms`));
+                      }, this.connectTimeout)
+                    : undefined;
+
+            socket.addEventListener('open', () => {
+                // Ignore events from a socket we've already replaced/abandoned.
+                if (this.socket !== socket) return;
+                if (settled) return;
+                settled = true;
+                if (timer) clearTimeout(timer);
+                resolve();
+            });
             socket.addEventListener('error', (ev: unknown) => {
+                if (this.socket !== socket) return;
                 for (const h of this.errorHandlers) h(ev);
-                if (this.state !== 'open') reject(ev instanceof Error ? ev : new Error('WebSocket connection error'));
+                if (!settled && this.state !== 'open') {
+                    settled = true;
+                    if (timer) clearTimeout(timer);
+                    if (this.socket === socket) this.socket = null;
+                    // Release the failed socket so it can't linger / fire later.
+                    try {
+                        socket.close();
+                    } catch {
+                        // ignore
+                    }
+                    reject(ev instanceof Error ? ev : new Error('WebSocket connection error'));
+                }
             });
             socket.addEventListener('close', (ev: { code?: number; reason?: string }) => {
+                if (this.socket !== socket) return;
+                if (timer) clearTimeout(timer);
                 for (const h of this.closeHandlers) h({ code: ev.code, reason: ev.reason });
             });
             socket.addEventListener('message', (ev: { data: unknown }) => {
+                if (this.socket !== socket) return;
                 const data = typeof ev.data === 'string' ? ev.data : String(ev.data);
                 for (const h of this.messageHandlers) h(data);
             });

@@ -14,6 +14,7 @@ from .client import (
     ProtocolError,
     RequestTimeoutError,
     SmoothAgentClient,
+    TurnTimeoutError,
 )
 from .transport import Transport, TransportState, WebSocketTransport
 from .types import (
@@ -73,6 +74,7 @@ __all__ = [
     "MessageTurn",
     "ProtocolError",
     "RequestTimeoutError",
+    "TurnTimeoutError",
     # transport
     "Transport",
     "TransportState",

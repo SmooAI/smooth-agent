@@ -12,6 +12,7 @@ export {
     SmoothAgentClient,
     MessageTurn,
     ProtocolError,
+    TurnTimeoutError,
     type SmoothAgentClientOptions,
 } from './client.js';
 export {

@@ -47,6 +47,13 @@ export interface SmoothAgentClientOptions {
     generateRequestId?: () => string;
     /** Per-request timeout in ms for non-streaming actions. Default 30000. */
     requestTimeout?: number;
+    /**
+     * Overall timeout in ms for a streaming `sendMessage` turn: if the server accepts
+     * the message but never emits a terminal `eventual_response` / `error`, the turn
+     * rejects with a {@link TurnTimeoutError} instead of hanging forever. Default
+     * 120000. Set to 0 (or a negative number) to disable.
+     */
+    turnTimeout?: number;
 }
 
 /** Events that terminate a streaming turn (success or error). */
@@ -57,6 +64,20 @@ class RequestTimeoutError extends Error {
     constructor(requestId: string, ms: number) {
         super(`Request ${requestId} timed out after ${ms}ms`);
         this.name = 'RequestTimeoutError';
+    }
+}
+
+/**
+ * A streaming turn that received no terminal `eventual_response` / `error` within the
+ * configured {@link SmoothAgentClientOptions.turnTimeout}. The turn rejects with this
+ * and its async iteration throws it, so a stuck server can never hang the caller.
+ */
+export class TurnTimeoutError extends Error {
+    readonly requestId: string;
+    constructor(requestId: string, ms: number) {
+        super(`Turn ${requestId} timed out after ${ms}ms without a terminal response`);
+        this.name = 'TurnTimeoutError';
+        this.requestId = requestId;
     }
 }
 
@@ -96,7 +117,10 @@ export class MessageTurn implements AsyncIterable<ServerEvent>, PromiseLike<Even
     readonly requestId: string;
 
     private readonly queue: ServerEvent[] = [];
-    private waiter: ((result: IteratorResult<ServerEvent>) => void) | null = null;
+    private waiter: {
+        resolve: (result: IteratorResult<ServerEvent>) => void;
+        reject: (err: unknown) => void;
+    } | null = null;
     private done = false;
     private finalEvent: EventualResponse | null = null;
     private error: unknown = null;
@@ -104,8 +128,9 @@ export class MessageTurn implements AsyncIterable<ServerEvent>, PromiseLike<Even
     private settle!: (value: EventualResponse) => void;
     private fail!: (err: unknown) => void;
     private readonly onClose: () => void;
+    private timeoutTimer: ReturnType<typeof setTimeout> | undefined;
 
-    constructor(requestId: string, onClose: () => void) {
+    constructor(requestId: string, onClose: () => void, turnTimeout = 0) {
         this.requestId = requestId;
         this.onClose = onClose;
         this.settled = new Promise<EventualResponse>((resolve, reject) => {
@@ -114,6 +139,13 @@ export class MessageTurn implements AsyncIterable<ServerEvent>, PromiseLike<Even
         });
         // Avoid unhandled-rejection noise if the caller only iterates and never awaits.
         this.settled.catch(() => {});
+        // Bound the turn: a server that accepts the message but never emits a terminal
+        // event must not hang the caller forever.
+        if (turnTimeout > 0) {
+            this.timeoutTimer = setTimeout(() => {
+                this.finish(null, new TurnTimeoutError(this.requestId, turnTimeout));
+            }, turnTimeout);
+        }
     }
 
     /** Feed an event into the turn (called by the client's dispatcher). */
@@ -145,7 +177,7 @@ export class MessageTurn implements AsyncIterable<ServerEvent>, PromiseLike<Even
         if (this.waiter) {
             const w = this.waiter;
             this.waiter = null;
-            w({ value: event, done: false });
+            w.resolve({ value: event, done: false });
         } else {
             this.queue.push(event);
         }
@@ -156,20 +188,26 @@ export class MessageTurn implements AsyncIterable<ServerEvent>, PromiseLike<Even
         this.done = true;
         this.finalEvent = final;
         this.error = err;
+        if (this.timeoutTimer) {
+            clearTimeout(this.timeoutTimer);
+            this.timeoutTimer = undefined;
+        }
         this.onClose();
 
         if (err) this.fail(err);
         else if (final) this.settle(final);
 
-        // Release any pending iterator waiter now that the stream has ended.
+        // Release any pending iterator waiter now that the stream has ended. On error
+        // the parked next() must *reject* (mirroring the queued-error path in next())
+        // so a pure `for await` consumer sees the terminal error thrown instead of a
+        // silent, indistinguishable `{ done: true }`.
         if (this.waiter) {
             const w = this.waiter;
             this.waiter = null;
             if (err) {
-                // Surface the terminal error through iteration too.
-                w({ value: undefined as never, done: true });
+                w.reject(err);
             } else {
-                w({ value: undefined as never, done: true });
+                w.resolve({ value: undefined as never, done: true });
             }
         }
     }
@@ -184,8 +222,8 @@ export class MessageTurn implements AsyncIterable<ServerEvent>, PromiseLike<Even
                     if (this.error) return Promise.reject(this.error);
                     return Promise.resolve({ value: undefined as never, done: true });
                 }
-                return new Promise<IteratorResult<ServerEvent>>((resolve) => {
-                    this.waiter = resolve;
+                return new Promise<IteratorResult<ServerEvent>>((resolve, reject) => {
+                    this.waiter = { resolve, reject };
                 });
             },
         };
@@ -204,6 +242,7 @@ export class SmoothAgentClient {
     private readonly transport: Transport;
     private readonly generateRequestId: () => string;
     private readonly requestTimeout: number;
+    private readonly turnTimeout: number;
 
     /** requestId → single-response waiter (create_session, get_session, ping, …). */
     private readonly pending = new Map<string, PendingRequest>();
@@ -217,6 +256,7 @@ export class SmoothAgentClient {
     constructor(options: SmoothAgentClientOptions) {
         this.transport = options.transport ?? new WebSocketTransport(options.url, options.webSocketFactory);
         this.requestTimeout = options.requestTimeout ?? 30_000;
+        this.turnTimeout = options.turnTimeout ?? 120_000;
         this.generateRequestId =
             options.generateRequestId ??
             (() => `req-${(globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2))}`);
@@ -281,7 +321,7 @@ export class SmoothAgentClient {
      */
     sendMessage(req: Omit<SendMessageRequest, 'action' | 'requestId'>): MessageTurn {
         const requestId = this.generateRequestId();
-        const turn = new MessageTurn(requestId, () => this.turns.delete(requestId));
+        const turn = new MessageTurn(requestId, () => this.turns.delete(requestId), this.turnTimeout);
         this.turns.set(requestId, turn);
         try {
             this.transport.send(JSON.stringify({ action: 'send_message', requestId, ...req }));
