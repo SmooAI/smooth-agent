@@ -20,6 +20,7 @@ use smooth_operator_core::tool::ToolSchema;
 use smooth_operator_core::{KnowledgeBase, KnowledgeResult, Tool};
 
 use crate::access_control::{AccessContext, AclKnowledgeStore};
+use crate::curation::{CuratedKnowledgeStore, RetrievalFilter};
 use crate::rerank::{apply_optional_rerank, Reranker};
 
 /// A shared sink the [`KnowledgeSearchTool`] records its structured results into,
@@ -87,6 +88,24 @@ impl KnowledgeSearchTool {
     pub fn with_access_control(store: &AclKnowledgeStore, context: AccessContext) -> Self {
         Self {
             knowledge: store.reader(context),
+            reranker: None,
+            result_sink: None,
+        }
+    }
+
+    /// Build the tool bound to a query-time [`RetrievalFilter`] +
+    /// [`AccessContext`] over a [`CuratedKnowledgeStore`] (Phase 11): every search
+    /// reads through a curation reader that scopes results to the requested
+    /// document sets / metadata, re-ranks by per-document boost, and still drops
+    /// documents the requester is not entitled to (ACL ∧ curation).
+    #[must_use]
+    pub fn with_curation(
+        store: &CuratedKnowledgeStore,
+        context: AccessContext,
+        filter: RetrievalFilter,
+    ) -> Self {
+        Self {
+            knowledge: store.reader(filter, context),
             reranker: None,
             result_sink: None,
         }

@@ -21,6 +21,7 @@
 
 pub mod access_control;
 pub mod adapter;
+pub mod curation;
 pub mod domain;
 pub mod embedding;
 pub mod rerank;
@@ -30,6 +31,9 @@ pub mod tools;
 
 pub use access_control::{AccessContext, AclKnowledgeStore, DocAcl};
 pub use adapter::{ConversationUpdate, MessagePage, MessageQuery, SessionUpdate, StorageAdapter};
+pub use curation::{
+    with_boost, with_document_set, CuratedKnowledgeStore, DocMeta, RetrievalFilter, DEFAULT_BOOST,
+};
 pub use domain::{
     Checkpoint, Citation, ContentItem, Conversation, Direction, Message, MessageContent,
     Participant, ParticipantRef, ParticipantType, Platform, Session, SessionStatus,

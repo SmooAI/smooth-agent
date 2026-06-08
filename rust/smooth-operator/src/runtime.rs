@@ -19,6 +19,7 @@ use smooth_operator_core::KnowledgeResult;
 
 use crate::access_control::{AccessContext, AclKnowledgeStore};
 use crate::adapter::{MessageQuery, StorageAdapter};
+use crate::curation::{CuratedKnowledgeStore, RetrievalFilter};
 use crate::domain::{Citation, Direction, Message as DomainMessage, MessageContent};
 use crate::telemetry::{
     GEN_AI_CONVERSATION_ID, GEN_AI_REQUEST_MODEL, GEN_AI_SYSTEM, GEN_AI_TOOL_NAME,
@@ -293,6 +294,14 @@ pub struct KnowledgeChatRuntime {
     /// requester is entitled to. `None` ⇒ no document-level filtering (org
     /// isolation upstream is unaffected); the raw `storage.knowledge()` is used.
     access: Option<RuntimeAccessControl>,
+    /// Query-time curation: document-set + metadata scoping with boost re-ranking
+    /// (Phase 11). When set, the runtime reads knowledge through a
+    /// [`CuratedKnowledgeStore`] reader bound to the given [`RetrievalFilter`]
+    /// (and the requester's [`AccessContext`], so ACL ∧ curation both apply).
+    /// `None` ⇒ no curation filter (current behavior unchanged). Takes precedence
+    /// over [`access`](Self::access) when both are set, because the curated store
+    /// enforces ACL itself.
+    curation: Option<RuntimeCuration>,
 }
 
 /// The runtime's bound access-control state: the ACL-aware knowledge store
@@ -302,6 +311,17 @@ pub struct KnowledgeChatRuntime {
 struct RuntimeAccessControl {
     store: AclKnowledgeStore,
     context: AccessContext,
+}
+
+/// The runtime's bound curation state: the curation-aware knowledge store
+/// (shared, owns the curation + ACL side tables populated at ingest), the
+/// requester identity (so ACL ∧ curation both apply), and the query-time filter
+/// to scope reads by.
+#[derive(Clone)]
+struct RuntimeCuration {
+    store: CuratedKnowledgeStore,
+    context: AccessContext,
+    filter: RetrievalFilter,
 }
 
 impl KnowledgeChatRuntime {
@@ -314,7 +334,48 @@ impl KnowledgeChatRuntime {
             llm_provider: None,
             max_iterations: 8,
             access: None,
+            curation: None,
         }
+    }
+
+    /// Enable query-time curation for this runtime (Phase 11): scope retrieval to
+    /// named document sets / metadata equalities and re-rank by per-document
+    /// boost.
+    ///
+    /// `store` is a [`CuratedKnowledgeStore`] wrapping the same inner
+    /// [`KnowledgeBase`](smooth_operator_core::KnowledgeBase) the documents were
+    /// ingested through (so its curation + ACL side tables are populated),
+    /// `context` is the requester's identity (ACL ∧ curation both apply — the
+    /// curated store enforces document-level access control itself), and `filter`
+    /// scopes the reads. Both the auto-injected `[Relevant knowledge]` context and
+    /// the `knowledge_search` tool read through this filtered, boosted reader.
+    ///
+    /// Pass [`RetrievalFilter::none`] to apply boost re-ranking with no
+    /// set/metadata scoping. Without calling this, retrieval is unchanged.
+    #[must_use]
+    pub fn with_curation(
+        mut self,
+        store: CuratedKnowledgeStore,
+        context: AccessContext,
+        filter: RetrievalFilter,
+    ) -> Self {
+        self.curation = Some(RuntimeCuration {
+            store,
+            context,
+            filter,
+        });
+        self
+    }
+
+    /// Set (or replace) just the [`RetrievalFilter`] on an already-configured
+    /// curation store, so a per-turn scope can be applied without rebuilding the
+    /// store. No-op (logs nothing) when curation is not configured.
+    #[must_use]
+    pub fn with_retrieval_filter(mut self, filter: RetrievalFilter) -> Self {
+        if let Some(curation) = &mut self.curation {
+            curation.filter = filter;
+        }
+        self
     }
 
     /// Enable document-level access control for this runtime (Onyx-gap G3).
@@ -340,6 +401,11 @@ impl KnowledgeChatRuntime {
     /// to the requester when access control is enabled, otherwise the raw
     /// storage-adapter knowledge base (unfiltered, org-scoping only).
     fn read_knowledge(&self) -> Arc<dyn smooth_operator_core::KnowledgeBase> {
+        // Curation (when set) takes precedence: its reader enforces ACL ∧
+        // set/metadata filter and applies boost re-ranking in one pass.
+        if let Some(cur) = &self.curation {
+            return cur.store.reader(cur.filter.clone(), cur.context.clone());
+        }
         match &self.access {
             Some(ac) => ac.store.reader(ac.context.clone()),
             None => self.storage.knowledge(),

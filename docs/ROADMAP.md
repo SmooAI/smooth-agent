@@ -102,8 +102,8 @@ Recurring principle: **"Smoo-powered or bring-your-own"** — hosted lom.smoo.ai
 - 🟡 **Background / incremental indexing** — engine done (`smooth_operator_ingestion::indexing`: `IndexingService::run_once` = `latest_cursor` → `pull(since)` → idempotent `ingest` → `IndexingRun`; `IndexingStore` trait + `InMemoryIndexingStore`; `IndexingProgress` seam for `job_status_updated`; cursor + failure-path + progress tests). See [INDEXING.md](INDEXING.md). Remaining: persistent `IndexingStore` adapters (Postgres/DynamoDB `indexing_runs` table) + the EventBridge Scheduler → Step Functions/Lambda (k8s: CronJob+worker) wiring.
 - ⬜ **Structured citations** (do early — sources are already retrieved): `citations[]` (id/title/url/snippet/score) in `eventual_response` + widget rendering.
 - ⬜ **Rich file parsing** — a `FileParser` seam: text/md/html inline; PDF/docx/pptx/xlsx+OCR → **Docling** in a container Lambda (off the hot path; feeds the chunker).
-- ⬜ **Document sets / curation / boosting** — membership table + retrieval filter + `boost` field.
-- ⬜ **Query-time features** — LLM query-rephrase, recency/time-decay boost in RRF, metadata filters.
+- ✅ **Document sets / curation / boosting** — membership side table + `RetrievalFilter` (set scope + metadata equality) + `boost` field re-ranking, applied in our layer (`CuratedKnowledgeStore`, over-fetch→filter→boost→re-sort→truncate), composing with ACL (ACL ∧ set ∧ metadata). Ingest-time tagging via `IngestOptions::in_document_sets`/`with_boost`. See [DOCUMENT-SETS.md](DOCUMENT-SETS.md).
+- 🟡 **Query-time features** — ✅ metadata filters (`RetrievalFilter::metadata_eq`, see above). Remaining: LLM query-rephrase, recency/time-decay boost in RRF.
 
 ## Phase 12 — Management UI + Auth/RBAC
 
