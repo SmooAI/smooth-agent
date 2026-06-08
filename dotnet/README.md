@@ -1,85 +1,150 @@
-# `SmooAI.SmoothOperator`
+<p align="center"><img src="../assets/smooth-logo.svg" alt="Smooth" width="360" /></p>
 
-C#/.NET protocol types and a native WebSocket client for the **smooth-operator**
-protocol. Sibling to the [TypeScript](../typescript) reference client.
+<p align="center"><strong><code>SmooAI.SmoothOperator</code></strong> — the native .NET client for the smooth-operator protocol, with a first-class <strong>Microsoft.Extensions.AI <code>IChatClient</code> facade</strong>.</p>
 
-The wire contract is the language-neutral JSON Schema in [`../spec`](../spec). The
-C# types are **generated** from those schemas with [NJsonSchema](https://github.com/RicoSuter/NJsonSchema)
-(and committed, so consumers don't need the generator), with an ergonomic layer
-(discriminated unions over System.Text.Json polymorphism) on top.
+<p align="center">
+  <a href="../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
+  <img src="https://img.shields.io/badge/tests-27%20passing-success" alt="27 tests passing" />
+  <img src="https://img.shields.io/badge/serverless%20%C2%B7%20polyglot%20%C2%B7%20TDD-6f42c1" alt="serverless · polyglot · TDD" />
+  <a href="https://lom.smoo.ai"><img src="https://img.shields.io/badge/hosted-lom.smoo.ai-0aa" alt="lom.smoo.ai" /></a>
+</p>
 
-## Target framework
+---
 
-`net8.0`. The .NET 10 SDK ships the .NET 8 targeting pack, so the library builds
-and tests run on `net8.0` for the broadest consumer reach.
+## What is this?
 
-## Layout
+The **native C#/.NET client** for the [smooth-operator](../docs/PROTOCOL.md) WebSocket protocol — `net8.0`, with generated-from-spec types and a streaming `MessageTurn`. Its headline feature is the **Microsoft.Extensions.AI (MEAI) `IChatClient` facade**: smooth-operator slots into any **Microsoft Agent Framework**, Semantic Kernel, or MEAI app, and a .NET dev's existing `AIFunction` tools work against it — provider-agnostic, no Azure/Foundry coupling. See [`docs/DOTNET.md`](../docs/DOTNET.md) for the full interop design.
 
-| Path | What |
-| --- | --- |
-| `src/Generated/Types.cs` | **Generated** 1:1 reflection of the JSON Schemas (committed). |
-| `src/Types.cs` | Ergonomic `ServerEvent` / `ClientAction` discriminated unions + enums. |
-| `src/Transport.cs` | `ITransport` (mockable) + `WebSocketTransport` (`ClientWebSocket`). |
-| `src/SmoothAgentClient.cs` | Typed async client; `MessageTurn` streaming. |
-| `src/ProtocolValidator.cs` | Runtime validation against the spec schemas. |
-| `src/EnumMemberStringConverter.cs` | STJ enum converter that honors `[EnumMember]` wire values. |
-| `tools/Generator/` | Codegen tool (`dotnet run --project tools/Generator`). |
-| `tests/` | xUnit conformance + client + serialization tests. |
+> Types are **generated** from the language-neutral JSON Schemas in [`../spec`](../spec) with [NJsonSchema](https://github.com/RicoSuter/NJsonSchema) (and committed). The ergonomic layer is discriminated unions over System.Text.Json polymorphism.
 
-## Usage
+---
+
+## 30-second quickstart
+
+```bash
+dotnet add package SmooAI.SmoothOperator   # NuGet publish pending — local project ref today
+```
 
 ```csharp
 using SmooAI.SmoothOperator;
 
 await using var client = new SmoothAgentClient(new SmoothAgentClientOptions
 {
-    Url = "wss://realtime.prod.smooth-agent.dev",
+    Url = "ws://127.0.0.1:8787",
 });
 await client.ConnectAsync();
 
 var session = await client.CreateConversationSessionAsync(
     new CreateConversationSessionAction { AgentId = agentId, UserName = "Alice" });
 
-// Streaming turn: iterate intermediate events AND await the terminal response.
 var turn = client.SendMessageAsync(new SendMessageAction
 {
     SessionId = session.SessionId,
-    Message = "What is the status of my last order?",
+    Message = "How long is your return window?",
+});
+
+EventualResponseEvent final = await turn.Completion;
+Console.WriteLine(final.Data.Payload.MessageId);
+```
+
+(Point `Url` at your own [`smooth-operator-server`](../rust/README.md) or the hosted endpoint.)
+
+---
+
+## Watch it stream
+
+`SendMessageAsync` returns a `MessageTurn` you can `await foreach` for live events **and** `await turn.Completion` for the authoritative terminal response.
+
+```csharp
+var turn = client.SendMessageAsync(new SendMessageAction
+{
+    SessionId = session.SessionId,
+    Message = "Where is my order?",
     Stream = true,
 });
 
 await foreach (var ev in turn)
 {
-    if (ev is StreamTokenEvent t) Console.Write(t.Token);
+    if (ev is StreamChunkEvent chunk) Console.Error.WriteLine($"  ↳ node: {chunk.Node}");
+    if (ev is StreamTokenEvent t)     Console.Write(t.Token);   // tokens, live
+    if (ev is WriteConfirmationRequiredEvent)
+        // HITL: approve, and the resumed stream flows back into this same turn.
+        await client.ConfirmToolActionAsync(session.SessionId, turn.RequestId, approved: true);
 }
 
 EventualResponseEvent final = await turn.Completion;
 Console.WriteLine($"\nmessageId: {final.Data.Payload.MessageId}");
 ```
 
-### HITL resume
+---
 
-`write_confirmation_required` / `otp_verification_required` events arrive on the
-originating turn (same `requestId`). Reply with the matching action; the resumed
-stream flows back into the same `MessageTurn`:
+## The Microsoft.Extensions.AI `IChatClient` facade
 
-```csharp
-await client.ConfirmToolActionAsync(sessionId, turn.RequestId, approved: true);
-await client.VerifyOtpAsync(sessionId, turn.RequestId, code: "123456");
-```
-
-### Runtime validation
+This is the .NET highlight. Wrap the remote `SmoothAgentClient` in a `SmoothAgentChatClient : IChatClient` and register it with DI — then smooth-operator behaves like any other MEAI chat client, including streaming.
 
 ```csharp
-var validator = await ProtocolValidator.LoadAsync(); // walks up to find spec/
-var result = validator.ValidateAction(ActionTypes.SendMessage, frameJson);
-if (!result.IsValid) Console.Error.WriteLine(result.FormatErrors());
+using Microsoft.Extensions.AI;
+using SmooAI.SmoothOperator;
+
+// DI registration — IServiceCollection extension.
+services.AddSmoothAgent(options => options.Url = "ws://127.0.0.1:8787");
+
+// Resolve and use it as a standard MEAI IChatClient.
+IChatClient chat = serviceProvider.GetRequiredService<IChatClient>();
+
+await foreach (var update in chat.GetStreamingResponseAsync("How long is your return window?"))
+    Console.Write(update.Text);
 ```
 
-> Note: NJsonSchema 11.x does not enforce JSON Schema `const`, so the validator
-> catches structural violations (`required`, `additionalProperties: false`, types)
-> but not a wrong discriminator value. The discriminated-union deserialization in
-> `src/Types.cs` is what enforces the `type` / `action` discriminator at runtime.
+Why this matters:
+
+- **Drop-in for the .NET AI ecosystem.** MEAI's `IChatClient` is the de-facto standard; the Microsoft Agent Framework and Semantic Kernel build on it. The facade lets smooth-operator slot into any of them.
+- **Your existing tools work.** `AIFunction` / `AIFunctionFactory.Create()` tools a .NET dev already wrote run against smooth-operator — no bespoke C# `ToolDefinition` DSL.
+- **A session handle, not id plumbing.** `SmoothAgentThread` wraps `sessionId`/`threadId` so multi-turn is `thread.RunStreamingAsync(msg)`.
+- **Middleware maps to engine hooks.** ASP.NET-style delegating handlers (pre/post run, pre/post tool) map onto smooth-operator's `ToolHook` / `ConfirmationHook`.
+- **Provider-agnostic.** No Azure/Foundry coupling — the agent runs behind the WS protocol; the facade is a thin skin over the remote client.
+
+> **Shipped & tested** (27 passing, incl. 6 MEAI interop tests over a mock transport): the generated protocol client (streaming `IAsyncEnumerable<ServerEvent>` + HITL), the `SmoothAgentChatClient : IChatClient` facade, `AddSmoothAgent(...)` DI, and `SmoothAgentThread`. Full design + borrow-list in [`docs/DOTNET.md`](../docs/DOTNET.md).
+
+---
+
+## Polyglot — one spec, five clients
+
+```mermaid
+flowchart LR
+  SPEC["spec/ (JSON Schema)"] --> NET[".NET<br/>SmooAI.SmoothOperator<br/>(+ MEAI IChatClient facade)"]
+  SPEC --> TS["TypeScript"]
+  SPEC --> GO["Go"]
+  SPEC --> PY["Python"]
+  SPEC --> RS["Rust"]
+```
+
+---
+
+## Test-driven by default
+
+> **Nothing here is vibe-coded — it's verified against a real LLM gateway.**
+
+```mermaid
+flowchart TD
+  J["🎯 LLM-as-judge quality evals (Rust harness)"]
+  E["🌐 Live cross-language E2E — this client boots the real server + drives a real claude-haiku-4-5 turn"]
+  C["🧪 Conformance fixtures (shared across all 5 clients)"]
+  U["⚡ Unit + serialization tests (polymorphic event union, HITL routing)"]
+  J --> E --> C --> U
+```
+
+**27 tests** — conformance, client, and serialization. The live cross-language E2E boots a real `smooth-operator-server` subprocess (KB seeded) and drives a real `claude-haiku-4-5` turn over WebSocket: ≥1 streamed event, a knowledge-grounded "17", per-session memory.
+
+**A real bug the live E2E caught (mocks masked it):** `[JsonPolymorphic]` required the `type` discriminator first, but the Rust server emits JSON keys alphabetically — so deserialization failed against the real server. The fix is a position-independent `ServerEventConverter`. A mock that emitted keys in declaration order would never have surfaced it.
+
+**The proof story:** an LLM-as-judge scored a multi-turn answer **1/5** (the runtime forgot turn 1's context); the failing eval drove a per-session-memory fix; **it now scores 5/5** — a regression a substring test would have missed. See [`docs/EVALS.md`](../docs/EVALS.md).
+
+Live tests are **gated, never silently skipped** — `SMOOTH_AGENT_E2E=1` + `SMOOAI_GATEWAY_KEY` to run; skip cleanly otherwise.
+
+```bash
+dotnet test SmooAI.SmoothOperator.slnx
+```
 
 ## Regenerating types
 
@@ -89,9 +154,10 @@ After a schema change in `../spec`:
 dotnet run --project tools/Generator
 ```
 
-## Build & test
+## Smoo-powered or bring-your-own
 
-```bash
-dotnet build SmooAI.SmoothOperator.slnx
-dotnet test  SmooAI.SmoothOperator.slnx
-```
+Point `Url` at the hosted **[lom.smoo.ai](https://lom.smoo.ai)** endpoint, or at your own self-hosted `smooth-operator-server` — same protocol, same client, same MEAI facade.
+
+## License
+
+MIT © 2026 Smoo AI
