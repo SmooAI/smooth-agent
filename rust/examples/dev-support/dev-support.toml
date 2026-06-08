@@ -1,0 +1,48 @@
+# dev-support.toml — the dev-team knowledge & support agent's config.
+#
+# Edit `owner`/`repo` to point at YOUR repository, then:
+#   export GITHUB_TOKEN=…  SMOOAI_GATEWAY_KEY=…
+#   cargo run -p smooai-smooth-operator-example-dev-support -- ingest
+#   cargo run -p smooai-smooth-operator-example-dev-support -- chat
+#
+# Secrets are NOT stored here — they come from the environment:
+#   GITHUB_TOKEN         a PAT, used when github.auth = "token"
+#   SMOOAI_GATEWAY_KEY   the llm.smoo.ai gateway key, used by `chat`/`serve`
+# so this file is safe to commit and share.
+
+[github]
+# The repository to index. (Default points at a small public repo so the demo
+# runs out of the box with github.auth = "none".)
+owner = "rust-lang"
+repo  = "mdBook"
+
+# Authentication:
+#   "token"  read $GITHUB_TOKEN (required for private repos + higher rate limits)
+#   "none"   unauthenticated public access (anonymous rate limit)
+auth = "none"
+
+# Set true for a private repo so ingested documents get a restricting ACL.
+private = false
+
+[github.include]
+prose  = true   # READMEs, docs/, *.md / *.mdx — the highest-signal knowledge
+code   = true   # source files (extension allowlist; vendored/binary/lockfiles skipped)
+issues = true   # issues + PRs (Q&A-style documents)
+
+[agent]
+# The model id requested from the gateway (cheap + fast by default).
+model = "claude-haiku-4-5"
+system_prompt = """
+You are the dev-team knowledge & support agent for this repository. Answer questions \
+about the codebase, its documentation, and its issue history. ALWAYS ground your answers \
+in the repository: call knowledge_search to retrieve indexed prose, code, and issues before \
+answering anything repo-specific, and cite the source files/issues you used. If the indexed \
+snapshot might be stale (the user asks about recently-merged code or a brand-new issue), call \
+github_search for the live state. If you cannot find an answer in the repository, say so \
+plainly rather than guessing.
+"""
+
+# The tools the agent may call (belongs to [agent]):
+#   knowledge_search   RAG over the indexed snapshot (prose + code + issues)
+#   github_search      live GitHub code/issue search (fresh lookups beyond the index)
+tools = ["knowledge_search", "github_search"]

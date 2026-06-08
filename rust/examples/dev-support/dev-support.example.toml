@@ -1,0 +1,47 @@
+# dev-support.example.toml — a fully-annotated reference config.
+#
+# Copy to `dev-support.toml`, point it at your repo, then run:
+#   export GITHUB_TOKEN=ghp_…        # a GitHub personal-access token
+#   export SMOOAI_GATEWAY_KEY=…      # your llm.smoo.ai gateway key
+#   cargo run -p smooai-smooth-operator-example-dev-support -- ingest
+#   cargo run -p smooai-smooth-operator-example-dev-support -- chat
+
+[github]
+# Owner (org or user) and repository name.
+owner = "your-org"
+repo  = "your-repo"
+
+# How to authenticate to GitHub:
+#   "token"  read $GITHUB_TOKEN — required for private repos and to avoid the
+#            low anonymous rate limit. The token needs `repo` (read) scope for
+#            private repos, or `public_repo` for public ones.
+#   "none"   unauthenticated public access (anonymous rate limit; public repos only).
+auth = "token"
+
+# Set true if the repo is private — ingested documents then get a restricting
+# ACL (scoped to the repo) instead of being left org-public.
+private = false
+
+[github.include]
+# Which content tiers to ingest. Turn any off to shrink the index / speed ingest.
+prose  = true   # READMEs, docs/, *.md / *.mdx
+code   = true   # source files (rs, ts, py, go, … — see DEFAULT_CODE_EXTENSIONS)
+issues = true   # issues + pull requests (title + body + top comments)
+
+[agent]
+# The model id sent to the gateway. Any model the gateway routes works;
+# claude-haiku-4-5 is cheap + fast and great for grounded Q&A.
+model = "claude-haiku-4-5"
+
+# The system prompt. The default keeps the agent grounded — search the index
+# first, reach for live github_search when the snapshot may be stale.
+system_prompt = """
+You are the dev-team knowledge & support agent for this repository. Ground every \
+answer in the repo: call knowledge_search before answering anything repo-specific and \
+cite your sources; call github_search for anything newer than the last ingest. Say so \
+plainly if the repo has no answer.
+"""
+
+# The tools the agent may call. Drop github_search to keep the agent purely on
+# the indexed snapshot (e.g. offline / air-gapped demos).
+tools = ["knowledge_search", "github_search"]
