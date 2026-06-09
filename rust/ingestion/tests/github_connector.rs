@@ -294,6 +294,162 @@ async fn private_repo_stamps_a_restricting_acl() {
     }
 }
 
+/// Configurable ACL group naming: when an operator sets `acl_groups` to *their
+/// own* IdP/SSO entitlement group names (e.g. Okta groups `TS-Eng-Pricing` /
+/// `TS-Eng-Orders`), the connector stamps **those exact strings** on every
+/// document as the repo's `DocAcl` groups — no translation layer. This is what
+/// lets a customer's SSO groups gate a repo's documents directly.
+#[tokio::test]
+async fn custom_acl_groups_are_stamped_verbatim() {
+    let server = mock_github().await;
+    let cfg = GithubConnectorConfig::new("octocat", "hello", GithubAuth::Unauthenticated)
+        .base_uri(server.uri())
+        .visibility(GithubVisibility::Private)
+        .acl_groups(["TS-Eng-Pricing", "TS-Eng-Orders"]);
+    let connector = GithubConnector::new(cfg);
+
+    let docs = connector.pull(None).await.expect("pull from mock GitHub");
+    assert!(!docs.is_empty(), "expected documents from the private repo");
+    for doc in &docs {
+        let acl = doc
+            .acl
+            .as_ref()
+            .unwrap_or_else(|| panic!("doc {} must carry an ACL", doc.id));
+        // EXACTLY the operator's groups — verbatim, no synthetic repo scope.
+        assert_eq!(
+            acl,
+            &vec!["TS-Eng-Pricing".to_string(), "TS-Eng-Orders".to_string()],
+            "custom acl_groups must be stamped verbatim, got {acl:?}"
+        );
+    }
+}
+
+/// Backward compatibility: a private repo with **no** `acl_groups` configured
+/// falls back to the synthetic per-repo scope `github:owner/repo` (today's
+/// behavior, unchanged), and a public repo stays org-public (`acl == None`) in
+/// both the custom and default cases.
+#[tokio::test]
+async fn default_private_repo_uses_repo_scope_and_public_stays_open() {
+    let server = mock_github().await;
+
+    // Private, no acl_groups ⇒ synthetic `github:owner/repo` scope (unchanged).
+    let private = GithubConnector::new(
+        GithubConnectorConfig::new("octocat", "hello", GithubAuth::Unauthenticated)
+            .base_uri(server.uri())
+            .visibility(GithubVisibility::Private),
+    );
+    let docs = private.pull(None).await.expect("pull private");
+    assert!(!docs.is_empty());
+    for doc in &docs {
+        let acl = doc.acl.as_ref().unwrap_or_else(|| {
+            panic!(
+                "private-repo doc {} must carry the default repo-scope ACL",
+                doc.id
+            )
+        });
+        assert_eq!(
+            acl,
+            &vec!["github:octocat/hello".to_string()],
+            "default private-repo ACL must be the synthetic repo scope, got {acl:?}"
+        );
+    }
+
+    // Public ⇒ no ACL stamped, regardless of whether acl_groups is set.
+    let public_default = GithubConnector::new(config_for(&server, GithubVisibility::Public));
+    let pub_docs = public_default.pull(None).await.expect("pull public");
+    assert!(!pub_docs.is_empty());
+    assert!(
+        pub_docs.iter().all(|d| d.acl.is_none()),
+        "public-repo documents must be org-public (no ACL)"
+    );
+
+    // A public repo with acl_groups set still stays org-public — acl_groups only
+    // changes WHICH groups gate a *restricted* repo; it never makes a public repo
+    // private.
+    let public_with_groups = GithubConnector::new(
+        GithubConnectorConfig::new("octocat", "hello", GithubAuth::Unauthenticated)
+            .base_uri(server.uri())
+            .visibility(GithubVisibility::Public)
+            .acl_groups(["TS-Eng-Pricing"]),
+    );
+    let pwg_docs = public_with_groups
+        .pull(None)
+        .await
+        .expect("pull public+groups");
+    assert!(
+        pwg_docs.iter().all(|d| d.acl.is_none()),
+        "acl_groups must not make a public repo private"
+    );
+}
+
+/// End-to-end: a document stamped by the connector with a **custom** SSO group
+/// (`TS-Eng-Pricing`) is retrievable by an `AccessContext` carrying that group
+/// and is NOT retrievable by one without it — proving a customer's own IdP group
+/// gates retrieval exactly like the default `github:owner/repo` scope would. This
+/// drives the full real chain: connector `acl_groups` → pipeline `DocAcl` →
+/// `AclKnowledgeStore` side table → `AclReader` enforcement.
+#[tokio::test]
+async fn custom_group_gates_retrieval_end_to_end() {
+    use smooth_operator::access_control::{AccessContext, AclKnowledgeStore};
+
+    let server = mock_github().await;
+    let connector = GithubConnector::new(
+        GithubConnectorConfig::new("octocat", "hello", GithubAuth::Unauthenticated)
+            .base_uri(server.uri())
+            .visibility(GithubVisibility::Private)
+            .acl_groups(["TS-Eng-Pricing"]),
+    );
+
+    // Wrap the in-memory KB so the ACL the connector stamps is recorded at ingest
+    // and enforced at read.
+    let storage: Arc<dyn StorageAdapter> = Arc::new(InMemoryStorageAdapter::new());
+    let acl_store = AclKnowledgeStore::new(storage.knowledge());
+    let report = ingest(
+        &connector,
+        &Chunker::default(),
+        &DeterministicEmbedder::new(),
+        acl_store.ingest_handle(),
+        IngestOptions::for_org("org-topstep"),
+    )
+    .await
+    .expect("ingest the private repo through the ACL store");
+    assert!(
+        report.chunks_stored >= 1,
+        "expected stored chunks, got {}",
+        report.chunks_stored
+    );
+
+    // A carrier of the custom Okta group reads the repo's docs.
+    let carrier = acl_store.reader(AccessContext::new(
+        Some("alice".into()),
+        vec!["TS-Eng-Pricing".into()],
+    ));
+    let hits = carrier.query("quibbleton", 5).expect("carrier query");
+    assert!(
+        hits.iter()
+            .any(|h| h.chunk.to_lowercase().contains("quibbleton")),
+        "a user carrying TS-Eng-Pricing must be able to read the repo's docs"
+    );
+
+    // A user WITHOUT the group (different group, and the default org-anonymous)
+    // sees nothing from the restricted repo.
+    let outsider = acl_store.reader(AccessContext::new(
+        Some("bob".into()),
+        vec!["TS-Eng-Billing".into()],
+    ));
+    let blocked = outsider.query("quibbleton", 5).expect("outsider query");
+    assert!(
+        blocked.is_empty(),
+        "a user WITHOUT TS-Eng-Pricing must not read the repo's docs, got {} hits",
+        blocked.len()
+    );
+    let anon = acl_store.reader(AccessContext::anonymous());
+    assert!(
+        anon.query("quibbleton", 5).expect("anon query").is_empty(),
+        "an anonymous requester must not read the restricted repo's docs"
+    );
+}
+
 #[tokio::test]
 async fn ingest_over_github_connector_is_retrievable() {
     let server = mock_github().await;

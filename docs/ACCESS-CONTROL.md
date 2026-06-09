@@ -143,6 +143,25 @@ query param (reference server) or the `send_message` `token` field (Lambda); see
 [`/ws` authentication](#ws-authentication--accesscontext) above. No token ⇒
 anonymous ⇒ org-public only (fail closed).
 
+> **Matching the `groups` claim to document ACLs — direct SSO mapping.** A document
+> is readable only by a principal whose `groups` claim contains one of the
+> document's ACL group strings. So the values in `groups` must match the strings
+> the connector stamped: either the connector's configured **`acl_groups`** (when
+> the operator set custom group names — see
+> [CONNECTORS.md → `acl_groups`](CONNECTORS.md#acl_groups--configurable-group-naming-map-your-sso-groups-directly))
+> or the **default** `github:owner/repo` string. Because `acl_groups` is stamped
+> verbatim, you can wire an IdP group **directly** to a repo's ACL with **no
+> translation layer**: set the GitHub connector's `acl_groups: ["TS-Eng-Pricing"]`
+> to the same Okta group `TS-Eng-Pricing` your IdP puts in the user's `groups`
+> claim, and **only** carriers of `TS-Eng-Pricing` can read that repo's documents:
+>
+> ```text
+> Okta group  "TS-Eng-Pricing"          (your IdP membership)
+>   → JWT      "groups": ["TS-Eng-Pricing", …]   (minted by your IdP)
+>   → connector acl_groups: ["TS-Eng-Pricing"]   (stamped verbatim on the repo's docs)
+>   ⇒ only users carrying TS-Eng-Pricing retrieve topstep/svc-pricing's documents.
+> ```
+
 ### Mint the token for the direct-widget case (JWT)
 
 When the **widget connects directly** to smooth-operator (it can reach `/ws`),

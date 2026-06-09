@@ -111,13 +111,46 @@ pub enum GithubAuth {
 Repo **visibility** drives the document ACL the pipeline stamps (see
 [ACCESS-CONTROL.md](ACCESS-CONTROL.md)):
 
-- **Public** repo → documents are org-public (no ACL).
+- **Public** repo → documents are org-public (no ACL). Setting `acl_groups` on a
+  public repo is a no-op — `acl_groups` only changes _which_ groups gate a
+  **restricted** (private) repo; it never makes a public repo private (or
+  vice-versa).
 - **Private** repo → documents are scoped to `acl_groups` (a group entitlement); a
   private repo configured with **no** groups falls back to a synthetic per-repo
   group (`github:owner/repo`) so it is **never** accidentally org-readable.
 
 The pipeline turns the `RawDocument.acl` labels into a `DocAcl` (under the
 `acl_v2` metadata key) that ACL-filtered retrieval enforces at read.
+
+#### `acl_groups` — configurable group naming (map your SSO groups directly)
+
+`acl_groups` is the **exact set of group strings** stamped on a restricted repo's
+documents — and those strings are matched **verbatim** against the requester's
+`groups` claim at retrieval (see the BYO-auth section of
+[ACCESS-CONTROL.md](ACCESS-CONTROL.md)). That means an operator can stamp **their
+own** IdP/SSO entitlement group names on a repo, so a customer's SSO groups gate
+its documents **directly, with no translation layer**:
+
+```rust
+// An operator whose Okta directory has the group `TS-Eng-Pricing` can gate the
+// pricing service's repo on it directly:
+let config = GithubConnectorConfig::new("topstep", "svc-pricing", auth)
+    .visibility(GithubVisibility::Private)
+    .acl_groups(["TS-Eng-Pricing"]);   // ← your Okta group name, stamped verbatim
+```
+
+Now only a user whose forwarded JWT `groups` claim carries `TS-Eng-Pricing` can
+retrieve `topstep/svc-pricing`'s documents — the Okta group **is** the document
+ACL, end to end.
+
+| `acl_groups`                  | visibility | stamped `DocAcl` groups       | who can read                          |
+| ----------------------------- | ---------- | ----------------------------- | ------------------------------------- |
+| `["TS-Eng-Pricing"]` (custom) | Private    | `["TS-Eng-Pricing"]`          | carriers of the `TS-Eng-Pricing` claim |
+| _unset_ (default)             | Private    | `["github:owner/repo"]`       | carriers of the `github:owner/repo` claim |
+| anything                      | Public     | _none_                        | the whole org (org-public)            |
+
+Unset `acl_groups` ⇒ exactly the prior behavior (`github:owner/repo`), so this is
+fully backward-compatible.
 
 ## Incremental pulls
 
