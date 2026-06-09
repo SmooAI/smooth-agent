@@ -286,7 +286,7 @@ pub struct KnowledgeChatRuntime {
     /// its `Agent` with this provider instead of a live client.
     llm_provider: Option<Arc<dyn LlmProvider>>,
     max_iterations: u32,
-    /// Document-level access control (Onyx-gap G3). When set, the runtime wraps
+    /// Document-level access control (feature gap G3). When set, the runtime wraps
     /// the storage adapter's [`KnowledgeBase`](smooth_operator_core::KnowledgeBase) in
     /// the given [`AclKnowledgeStore`] and reads through a per-turn
     /// [`AccessContext`]-bound reader, so retrieval (both the auto-injected
@@ -378,7 +378,7 @@ impl KnowledgeChatRuntime {
         self
     }
 
-    /// Enable document-level access control for this runtime (Onyx-gap G3).
+    /// Enable document-level access control for this runtime (feature gap G3).
     ///
     /// `store` is an [`AclKnowledgeStore`] that wraps the same inner
     /// [`KnowledgeBase`](smooth_operator_core::KnowledgeBase) the documents were
@@ -449,7 +449,7 @@ impl KnowledgeChatRuntime {
     ) -> Agent {
         // The knowledge handle both retrieval paths read through. When access
         // control is enabled this is an ACL-filtering reader bound to the
-        // requester's `AccessContext` (Onyx-gap G3); otherwise it's the raw
+        // requester's `AccessContext` (feature gap G3); otherwise it's the raw
         // org-scoped knowledge base. Built once so both paths hit the SAME store
         // and the SAME ACL filter.
         let knowledge = self.read_knowledge();

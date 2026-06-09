@@ -1,4 +1,4 @@
-//! Document-level access control (Onyx-gap G3) — the cross-user **leak** test.
+//! Document-level access control (feature gap G3) — the cross-user **leak** test.
 //!
 //! This test is the highest-severity guarantee in the gap analysis: within a
 //! single organization, a retrieval as user B must **never** surface a document

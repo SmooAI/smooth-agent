@@ -1,6 +1,6 @@
 # Architecture
 
-smooth-operator is the **service layer** on top of [`smooth-operator`](https://github.com/SmooAI/smooth-operator-core) (the agent engine). This document describes how the pieces fit, what we borrowed from [Onyx](https://github.com/onyx-dot-app/onyx), and why the design is serverless-first.
+smooth-operator is the **service layer** on top of [`smooth-operator`](https://github.com/SmooAI/smooth-operator-core) (the agent engine). This document describes how the pieces fit, what we borrowed from mature knowledge platforms, and why the design is serverless-first.
 
 ## 1. The big picture
 
@@ -70,7 +70,7 @@ Storage-backend mappings are in [STORAGE.md](STORAGE.md).
 
 ## 4. Knowledge & retrieval
 
-We emulate Onyx's **hybrid retrieval** (the part worth keeping) without Vespa (the part that doesn't fit serverless):
+We use a standard **hybrid retrieval** (the part worth keeping) without Vespa (the part that doesn't fit serverless):
 
 - **Dense**: embedding similarity. Embeddings via a pluggable provider — **Voyage** (`voyage-3-large`, 1024-dim, asymmetric query/document input types), OpenAI, etc.
 - **Sparse**: keyword/BM25.
@@ -81,7 +81,7 @@ Backends:
 - **k8s/self-host**: Postgres + `pgvector` (HNSW) + `tsvector` BM25 — mirrors the smooai monorepo's `knowledge_vectors` table exactly.
 - **AWS serverless**: **Amazon S3 Vectors** for dense ANN (DynamoDB has no native vector/ANN index), with sparse/keyword handled by a DynamoDB-friendly inverted index or deferred to a managed search service. See [STORAGE.md](STORAGE.md) §Knowledge.
 
-## 5. What we borrowed from Onyx (and what we didn't)
+## 5. What we borrowed (and what we didn't)
 
 **Emulate:**
 - Hybrid (vector + keyword) retrieval pipeline with reranking.

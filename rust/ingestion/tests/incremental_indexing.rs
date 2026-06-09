@@ -1,4 +1,4 @@
-//! Incremental / background indexing contract (Onyx-gap Phase 11), network-free.
+//! Incremental / background indexing contract (feature gap Phase 11), network-free.
 //!
 //! The headline test: run [`IndexingService::run_once`] **twice** against an
 //! in-memory knowledge store and an [`InMemoryIndexingStore`]. Run 1 pulls every

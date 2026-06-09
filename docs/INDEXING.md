@@ -3,7 +3,7 @@
 The [ingestion crate](INGESTION.md) gives you a one-shot pull → chunk → embed →
 store pipeline. **Indexing** is what runs that pipeline *on a schedule*, pulling
 only what changed since the last run, and recording the status of every run so a
-UI can show it. This is the smooth-operator analog of Onyx's background indexing
+UI can show it. This is the smooth-operator analog of its own background indexing
 workers + `index_attempt` table — Phase 11 of the [ROADMAP](ROADMAP.md).
 
 Lives in `rust/ingestion` (`smooth_operator_ingestion::indexing`):

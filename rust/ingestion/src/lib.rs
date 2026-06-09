@@ -3,7 +3,7 @@
 //! Knowledge **ingestion + connectors** for smooth-operator — the pipeline
 //! that pulls documents from a source, chunks them, embeds them, and stores them
 //! in the [`StorageAdapter`](smooth_operator::adapter::StorageAdapter)
-//! knowledge slice so they are retrievable. This closes Onyx-gap G1 (knowledge
+//! knowledge slice so they are retrievable. This closes feature gap G1 (knowledge
 //! ingestion + connectors), G2 (document chunking pipeline), and G9 (the
 //! connector mock + `unit`-vs-`external` test split). See `docs/INGESTION.md`.
 //!

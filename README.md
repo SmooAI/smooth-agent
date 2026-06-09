@@ -13,7 +13,7 @@
 
 ## What is this?
 
-**smooth-operator** is an [Onyx](https://github.com/onyx-dot-app/onyx)-class knowledge-assistant platform that runs on **AWS Lambda** — no Vespa, no Celery worker fleet, no monolith to babysit. The agent orchestration engine is Rust ([`smooth-operator-core`](https://github.com/SmooAI/smooth-operator-core)); the **service** speaks one schema-driven WebSocket protocol that **five languages** — TypeScript, Go, C#/.NET, Python, and Rust — implement natively.
+**smooth-operator** is a **serverless knowledge-assistant platform** that runs on **AWS Lambda** — no Vespa, no Celery worker fleet, no monolith to babysit. The agent orchestration engine is Rust ([`smooth-operator-core`](https://github.com/SmooAI/smooth-operator-core)); the **service** speaks one schema-driven WebSocket protocol that **five languages** — TypeScript, Go, C#/.NET, Python, and Rust — implement natively.
 
 You get hybrid retrieval (dense + sparse + rerank), durable agent checkpoints, human-in-the-loop approvals, and multi-participant conversations (`user` · `ai-agent` · `human-agent`) — deployed with **one command** to AWS serverless *or* Kubernetes.
 
@@ -122,13 +122,13 @@ The model autonomously calls `knowledge_search`, retrieves the seeded **17-day**
 
 ---
 
-## Why this (and not Onyx)?
+## Why serverless?
 
-Onyx/Danswer are wonderful — but **stateful and container-bound**: Postgres + a dedicated vector engine (Vespa) + Redis + a blob store + long-running Celery workers. That's a poor fit for stateless serverless and an awkward thing to "just deploy."
+The usual open knowledge-assistant stack is **stateful and container-bound**: Postgres + a dedicated vector engine (Vespa) + Redis + a blob store + long-running worker fleets. That's a poor fit for stateless serverless and an awkward thing to "just deploy."
 
 smooth-operator makes a different bet:
 
-|                       | Onyx                                   | **smooth-operator**                                              |
+|                       | Typical stateful stack                 | **smooth-operator**                                             |
 | --------------------- | -------------------------------------- | --------------------------------------------------------------- |
 | Compute               | Long-running containers + Celery       | **AWS Lambda** (or k8s pods — your choice)                       |
 | Vector store          | **Vespa** (a cluster to run)           | **S3 Vectors** (AWS) / **pgvector** (k8s) — no cluster on AWS    |
@@ -137,7 +137,7 @@ smooth-operator makes a different bet:
 | Agent core            | In-process Python                      | Rust engine ([`smooth-operator-core`](https://github.com/SmooAI/smooth-operator-core)) behind a stable wire protocol |
 | Deploy                | docker-compose / Helm                  | **`SST` (one command)** *or* Helm + ArgoCD                       |
 
-What we **kept** from Onyx: hybrid (vector + keyword) retrieval with reranking, the clean Chat · RAG · Agents · Actions decomposition, connector-style ingestion, and the MIT, batteries-included self-host story. What we **dropped**: Vespa, persistent Redis/MinIO, and the standing worker fleet — see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §5.
+What it **keeps**: hybrid (vector + keyword) retrieval with reranking, a clean Chat · RAG · Agents · Actions decomposition, connector-style ingestion, and the MIT, batteries-included self-host story. What it **drops**: Vespa, persistent Redis/MinIO, and the standing worker fleet — see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §5.
 
 ---
 
@@ -166,14 +166,9 @@ flowchart LR
   RT -->|"Agent::run loop"| ENGINE["smooth-operator-core<br/>(Rust engine:<br/>Agent · Tool · Memory · HITL · cost)"]
   ENGINE -->|"LlmProvider"| GW["llm.smoo.ai<br/>(or BYO gateway)"]
 
-  RT -->|"StorageAdapter trait"| STORE
-
-  subgraph STORE["Storage adapters"]
-    direction LR
-    PG[("Postgres<br/>+ pgvector<br/>(k8s)")]
-    DDB[("DynamoDB<br/>+ S3 Vectors<br/>(AWS)")]
-    KB["Knowledge<br/>(hybrid retrieval)"]
-  end
+  RT -->|"StorageAdapter trait"| KB["Knowledge + conversations<br/>(hybrid retrieval)"]
+  KB --> PG[("Postgres + pgvector<br/>(k8s)")]
+  KB --> DDB[("DynamoDB + S3 Vectors<br/>(AWS)")]
 ```
 
 ### An agent turn, end to end
@@ -205,14 +200,14 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
   [*] --> Connected: connect
-  Connected --> SessionOpen: create_conversation_session
+  Connected --> SessionOpen: create_session
   SessionOpen --> Streaming: send_message
-  Streaming --> Streaming: stream_token / stream_chunk
-  Streaming --> AwaitingApproval: write_confirmation_required
-  Streaming --> AwaitingOtp: otp_verification_required
-  AwaitingApproval --> Streaming: confirm_tool_action(approved)
-  AwaitingOtp --> Streaming: verify_otp(code)
-  Streaming --> SessionOpen: eventual_response (terminal)
+  Streaming --> Streaming: stream_token · chunk
+  Streaming --> AwaitingApproval: confirm_required
+  AwaitingApproval --> Streaming: approve
+  Streaming --> AwaitingOtp: otp_required
+  AwaitingOtp --> Streaming: verify_otp
+  Streaming --> SessionOpen: eventual_response
   SessionOpen --> [*]: disconnect
 ```
 

@@ -1,7 +1,7 @@
 //! End-to-end knowledge-chat turn — driven entirely by a MockLlmClient, so it
 //! runs with **no API keys and no network**.
 //!
-//! This is the heart of the "onyx-like" value: a user asks a question, the
+//! This is the heart of the "knowledge-assistant" value: a user asks a question, the
 //! agent searches the knowledge base, the retrieved fact comes back, and the
 //! agent answers grounded in it — all through the real smooth-operator agent
 //! loop (`Agent::run`), with the only fake being the LLM's scripted decisions.

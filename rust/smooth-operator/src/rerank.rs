@@ -1,4 +1,4 @@
-//! Reranking — the optional post-retrieval reorder stage (Onyx-gap G8).
+//! Reranking — the optional post-retrieval reorder stage (feature gap G8).
 //!
 //! Hybrid retrieval (dense pgvector ∪ sparse `tsvector` BM25 → Reciprocal Rank
 //! Fusion) gives a good top-K, but the fusion score is a *rank* signal, not a

@@ -5,7 +5,7 @@ smooth-operator's knowledge base used to be seeded by hand: you called
 (`rust/ingestion`, package `smooai-smooth-operator-ingestion`) closes that
 gap — it pulls documents from a *source*, chunks them, embeds them, and stores
 them in the `StorageAdapter` knowledge slice so they're retrievable. This is the
-analog of [Onyx's connector framework](ONYX-TESTING-GAP-ANALYSIS.md) and closes
+analog of [a mature connector framework](FEATURE-GAP-ANALYSIS.md) and closes
 gaps **G1** (ingestion + connectors), **G2** (chunking pipeline), and **G9** (the
 connector mock + `unit`-vs-`external` test split).
 
@@ -131,7 +131,7 @@ unchanged content.
 
 ### Stubbed (follow-up)
 
-The broader SaaS set Onyx covers (confluence, jira, notion, slack, salesforce, …)
+The broader SaaS set mature platforms cover (confluence, jira, notion, slack, salesforce, …)
 is intentionally not in this batch — each is a new `Connector` impl following the
 authoring recipe below. Don't over-scope; add them one at a time with the same
 test split.
@@ -248,4 +248,4 @@ SMOOTH_AGENT_E2E=1 cargo test -p smooai-smooth-operator-ingestion \
 
 - [STORAGE.md](STORAGE.md) — the `StorageAdapter` seam and its knowledge slice
 - [TOOLS.md](TOOLS.md) — `fetch_url` (whose SSRF guard + HTML stripper the web connector reuses) and `knowledge_search` (retrieval over what ingestion stores)
-- [ONYX-TESTING-GAP-ANALYSIS.md](ONYX-TESTING-GAP-ANALYSIS.md) — G1/G2/G9 this closes
+- [FEATURE-GAP-ANALYSIS.md](FEATURE-GAP-ANALYSIS.md) — G1/G2/G9 this closes

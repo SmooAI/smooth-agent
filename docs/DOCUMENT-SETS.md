@@ -1,7 +1,7 @@
 # Document sets, curation boosting & query-time metadata filters
 
 Phase 11 ("Document sets / curation / boosting") of the [ROADMAP](ROADMAP.md).
-Onyx-parity curation features layered onto retrieval **in our service layer** —
+feature-parity curation features layered onto retrieval **in our service layer** —
 exactly like [document-level access control](ACCESS-CONTROL.md), and for the same
 reason: the engine's `KnowledgeBase::query` returns only
 `document_id`/`chunk`/`score`/`source` (not stored metadata), and the in-memory

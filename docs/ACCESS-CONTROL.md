@@ -1,9 +1,9 @@
 # Document-level access control
 
-Onyx syncs per-connector permissions and filters retrieval by user entitlement;
+Mature knowledge platforms sync per-connector permissions and filter retrieval by user entitlement;
 before this, smooth-operator filtered knowledge by `organizationId` only.
-This is the within-org **document-level** layer (Onyx-gap **G3**, the
-highest-severity gap in [ONYX-TESTING-GAP-ANALYSIS.md](ONYX-TESTING-GAP-ANALYSIS.md)):
+This is the within-org **document-level** layer (feature gap **G3**, the
+highest-severity gap in [FEATURE-GAP-ANALYSIS.md](FEATURE-GAP-ANALYSIS.md)):
 even inside one organization, a document may be restricted to specific users or
 groups, and a retrieval must only ever return documents the requester is
 entitled to read.
@@ -145,4 +145,4 @@ tests.
 
 - [STORAGE.md](STORAGE.md) — the `StorageAdapter` seam and the knowledge slice.
 - [INGESTION.md](INGESTION.md) — where `RawDocument.acl` is stamped into `acl_v2`.
-- [ONYX-TESTING-GAP-ANALYSIS.md](ONYX-TESTING-GAP-ANALYSIS.md) — G3 and the TDD plan.
+- [FEATURE-GAP-ANALYSIS.md](FEATURE-GAP-ANALYSIS.md) — G3 and the TDD plan.

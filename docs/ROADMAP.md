@@ -93,9 +93,9 @@ Every client is generated from `spec/` (protocol-first) and validates the shared
 
 - ✅ G1 ingestion framework (Connector/Chunker/pipeline + file/web). ✅ G3 document ACLs. ✅ G4 LLM-judge evals. ✅ G8 rerank. ✅ G5 widget Playwright e2e. ✅ G6 kind deploy smoke.
 - ⬜ **GitHub connector** (README/docs/md + code + issues/PRs/discussions; GitHub App installation token / PAT) + a live `github_search` tool — first consumer = `examples/dev-support`.
-- ⬜ Connector breadth (the other SaaS sources), per Onyx.
+- ⬜ Connector breadth (the other SaaS sources).
 
-## Phase 11 — Knowledge depth (Onyx parity)
+## Phase 11 — Knowledge depth (feature parity)
 
 Recurring principle: **"Smoo-powered or bring-your-own"** — hosted lom.smoo.ai wires Smoo's apps (identity, GitHub App, Slack App, managed parsing); self-host brings their own. Same code, two postures.
 
@@ -126,4 +126,4 @@ Recurring principle: **"Smoo-powered or bring-your-own"** — hosted lom.smoo.ai
 
 Done through Phase 6 (dual deploy), Phase 5 (all clients + live cross-language E2E), Phase 10 majority (ingestion, ACLs, evals, rerank, widget e2e, kind CI), plus tool catalog, OTel, .NET MEAI, `SmooAI/deploy`, `SmooAI/chat-widget`.
 
-Queued: (1) **rename** `smooth-operator`→`smooth-operator-core`, `smooth-operator`→`smooth-operator`; (2) **incredible DX-driven, TDD-forward READMEs** for all packages; (3) the **dev-support agent** (`examples/dev-support` + GitHub connector + full-page chat + citations). Then the Phase 11–14 Onyx-parity build-out, and the user-gated arcs (smooai cutover, crates.io/npm publish).
+Queued: (1) **rename** `smooth-operator`→`smooth-operator-core`, `smooth-operator`→`smooth-operator`; (2) **incredible DX-driven, TDD-forward READMEs** for all packages; (3) the **dev-support agent** (`examples/dev-support` + GitHub connector + full-page chat + citations). Then the Phase 11–14 feature-parity build-out, and the user-gated arcs (smooai cutover, crates.io/npm publish).

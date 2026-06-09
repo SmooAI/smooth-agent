@@ -1,6 +1,6 @@
 name: kind deploy smoke
 
-# Onyx-gap G6: a kind-based deployment smoke test. Stands up the Helm chart in an
+# feature gap G6: a kind-based deployment smoke test. Stands up the Helm chart in an
 # ephemeral kind cluster, backed by a throwaway pgvector Postgres, and drives the
 # wire protocol (ping -> pong, create_conversation_session -> session id) over a
 # live WebSocket to the deployed pod. No gateway key is needed — those actions

@@ -47,7 +47,7 @@ const RERANK_OVERFETCH: usize = 4;
 ///
 /// Optionally holds an `Arc<dyn Reranker>`: when set, the tool overfetches
 /// candidates from the knowledge query and reorders them with the reranker
-/// before returning the top-K (Onyx-gap G8). When unset (the default), behavior
+/// before returning the top-K (feature gap G8). When unset (the default), behavior
 /// is unchanged — the knowledge query's own top-`limit` is returned as-is.
 pub struct KnowledgeSearchTool {
     knowledge: Arc<dyn KnowledgeBase>,
@@ -81,7 +81,7 @@ impl KnowledgeSearchTool {
     }
 
     /// Build the tool bound to a requester's [`AccessContext`] over an
-    /// [`AclKnowledgeStore`] (Onyx-gap G3): every search reads through an
+    /// [`AclKnowledgeStore`] (feature gap G3): every search reads through an
     /// ACL-filtering reader, so results the requester is not entitled to are
     /// dropped before they reach the model.
     #[must_use]
@@ -111,7 +111,7 @@ impl KnowledgeSearchTool {
         }
     }
 
-    /// Record the structured results of every search into `sink` (Onyx-gap:
+    /// Record the structured results of every search into `sink` (feature gap:
     /// structured citations). The runtime drains the sink after a turn to build
     /// the `eventual_response`'s `citations` from the documents the agent's
     /// `knowledge_search` calls actually surfaced. Leaving it unset keeps the
@@ -122,7 +122,7 @@ impl KnowledgeSearchTool {
         self
     }
 
-    /// Attach an optional reranker stage (Onyx-gap G8).
+    /// Attach an optional reranker stage (feature gap G8).
     ///
     /// When set, the tool overfetches candidates and reorders the top-K with the
     /// [`Reranker`] before returning. Pass a [`LexicalReranker`](crate::rerank::LexicalReranker)
@@ -193,7 +193,7 @@ impl Tool for KnowledgeSearchTool {
         // fine (no blocking I/O to offload to a worker thread).
         let candidates = self.knowledge.query(query, fetch)?;
 
-        // Opt-in rerank stage (Onyx-gap G8): reorder + truncate to `limit`. With
+        // Opt-in rerank stage (feature gap G8): reorder + truncate to `limit`. With
         // `None` this is just a truncation, preserving the query's own order.
         let results = apply_optional_rerank(self.reranker.as_ref(), query, candidates, limit).await;
 

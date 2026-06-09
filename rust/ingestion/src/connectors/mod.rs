@@ -7,8 +7,8 @@
 //! - [`GithubConnector`] — a GitHub repository's prose (READMEs / `docs/` /
 //!   `*.md`), source code, and issues / PRs / discussions via the GitHub API.
 //!
-//! Follow-up (stubbed by design, tracked under Onyx-gap G1): the broader SaaS
-//! set Onyx covers (confluence, jira, notion, slack, …). Each new connector is
+//! Follow-up (stubbed by design, tracked under feature gap G1): the broader SaaS
+//! set mature platforms cover (confluence, jira, notion, slack, …). Each new connector is
 //! a `Connector` impl plus a `unit` test against fixture data and an
 //! `external`-gated live test, exactly like [`WebConnector`]'s split — see
 //! `docs/CONNECTORS.md` § "Authoring a custom connector".

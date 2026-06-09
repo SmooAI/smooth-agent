@@ -1,8 +1,8 @@
-//! Document-level access control (Onyx-gap G3).
+//! Document-level access control (feature gap G3).
 //!
 //! Org isolation already exists (every conversation / knowledge row carries an
 //! `organizationId`, and the Postgres knowledge base filters on it). This module
-//! adds the **within-org user/group entitlement** layer Onyx calls
+//! adds the **within-org user/group entitlement** layer the industry calls
 //! document-level permissions: even inside one organization, a document may be
 //! restricted to specific users or groups, and a retrieval must only ever return
 //! documents the requester is entitled to read.

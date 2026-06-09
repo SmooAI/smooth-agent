@@ -1,4 +1,4 @@
-//! The ingestion pipeline: pull → chunk → embed → store (Onyx-gap G1).
+//! The ingestion pipeline: pull → chunk → embed → store (feature gap G1).
 //!
 //! [`ingest`] drives a [`Connector`] through a [`Chunker`] and an [`Embedder`]
 //! into a smooth-operator [`KnowledgeBase`] (the `StorageAdapter`'s knowledge
@@ -326,7 +326,7 @@ fn store_chunk(
         }
     }
 
-    // Carry ACL labels for ACL-filtered retrieval (Onyx-gap G3).
+    // Carry ACL labels for ACL-filtered retrieval (feature gap G3).
     //
     // The legacy comma-joined "acl" field is kept for human/debug visibility.
     // The structured `DocAcl` (under `DocAcl::ACL_METADATA_KEY`) is what an

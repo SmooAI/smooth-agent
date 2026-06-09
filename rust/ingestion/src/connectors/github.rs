@@ -3,7 +3,7 @@
 //! issues / PRs / discussions.
 //!
 //! This is the primary source behind the `examples/dev-support` dev-team
-//! knowledge agent (Onyx-gap G1). It mirrors the [`FileConnector`]/[`WebConnector`]
+//! knowledge agent (feature gap G1). It mirrors the [`FileConnector`]/[`WebConnector`]
 //! shape: a [`Connector`] impl plus an offline contract test (a mock GitHub API
 //! via `wiremock`, see `tests/github_connector.rs`) and an `external`-gated live
 //! test.

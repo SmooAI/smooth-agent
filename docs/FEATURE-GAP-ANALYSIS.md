@@ -1,10 +1,10 @@
-# Onyx testing & feature gap analysis (TDD plan)
+# Testing & feature gap analysis (TDD plan)
 
-A review of how [Onyx](https://github.com/onyx-dot-app/onyx) tests, what it has that `smooth-operator` does not, and a **test-driven** plan to close the gaps. **Policy: every gap below is closed test-first — write the failing test, then the implementation.**
+A review of how mature knowledge platforms test, what it has that `smooth-operator` does not, and a **test-driven** plan to close the gaps. **Policy: every gap below is closed test-first — write the failing test, then the implementation.**
 
-## 1. How Onyx tests
+## 1. How mature knowledge platforms test
 
-Onyx ships **~1,156 test files** (982 backend, 115 web) across a layered taxonomy and ~13 CI workflows.
+Mature knowledge platforms ship 1,000+ test files across a layered taxonomy and ~13 CI workflows.
 
 ### Backend test layers (`backend/tests/`)
 | Layer | Files | What it is |
@@ -37,44 +37,44 @@ Strong on correctness-of-mechanics, thin on breadth:
 
 What we **lack**: ingestion/connectors, a document-processing pipeline, access-control/permissions, multi-tenancy, frontend e2e, deployment-integration tests in CI, and a formal quality-regression suite.
 
-## 3. Gaps (Onyx-has / we-don't) → TDD plan
+## 3. Gaps (baseline-has / we-don't) → TDD plan
 
 Ordered by leverage. Each item: **write the test first (red), then implement (green)**.
 
 ### G1. Knowledge ingestion + connectors (biggest gap)
-Onyx has **58+ connectors** (confluence, jira, github, gmail, google_drive, notion, salesforce, sharepoint, slack, zendesk, web, …) + a `mock_connector` for testing. We have only manual/seeded knowledge.
-- **TDD**: define a `Connector` trait (`async fn pull(&self, since) -> Stream<Document>`). Write `tests/connector_contract.rs` against a **`MockConnector`** first (asserts the ingest→chunk→embed→store pipeline lands documents in the `StorageAdapter` knowledge slice + they're retrievable). Then implement the trait + 2–3 real connectors (web, file, github) each with an `external_dependency`-gated test mirroring Onyx's split.
+Mature platforms ship 50+ connectors (confluence, jira, github, gmail, google_drive, notion, salesforce, sharepoint, slack, zendesk, web, …) + a `mock_connector` for testing. We have only manual/seeded knowledge.
+- **TDD**: define a `Connector` trait (`async fn pull(&self, since) -> Stream<Document>`). Write `tests/connector_contract.rs` against a **`MockConnector`** first (asserts the ingest→chunk→embed→store pipeline lands documents in the `StorageAdapter` knowledge slice + they're retrievable). Then implement the trait + 2–3 real connectors (web, file, github) each with an `external_dependency`-gated test mirroring that split.
 
 ### G2. Document processing / chunking pipeline
-Onyx has a tested chunking + metadata-extraction pipeline. Our knowledge store assumes pre-chunked text.
+Mature knowledge platforms have a tested chunking + metadata-extraction pipeline. Our knowledge store assumes pre-chunked text.
 - **TDD**: `tests/chunking.rs` first — feed a long doc + assert chunk count, overlap, boundary rules, metadata propagation, and that oversized items spill correctly. Then implement the chunker the connectors feed.
 
 ### G3. Access control / permissions (document-level)
-Onyx syncs per-connector permissions and filters retrieval by user entitlement. We filter by `organizationId` only.
+Mature knowledge platforms sync per-connector permissions and filters retrieval by user entitlement. We filter by `organizationId` only.
 - **TDD**: `tests/access_control.rs` first — seed docs with ACLs for users A/B; assert a query as user B never returns A-only docs (the **cross-tenant/cross-user leak** test, the highest-severity class). Then add an ACL column + retrieval filter to every adapter; run the test against Postgres + DynamoDB.
 
 ### G4. Answer- & search-quality regression suite (formalize the eval layer)
-Onyx has a `regression/` layer + nightly LLM-provider-chat. We're adding LLM-judge evals — formalize it.
+Mature knowledge platforms have a `regression/` layer + nightly LLM-provider-chat. We're adding LLM-judge evals — formalize it.
 - **TDD**: grow `rust/evals` into the regression layer — a fixed scenario set with rubric thresholds (grounding, **anti-hallucination/honest-don't-know**, tool-use appropriateness, multi-turn reasoning), plus a **retrieval-quality** eval (seed a corpus, assert recall@k / MRR on labeled queries — deterministic, no LLM). Add a `nightly` CI job that runs the judged evals across models. Track score history to catch regressions.
 
 ### G5. Frontend e2e (Playwright) for the chat widget
-Onyx has 115 web tests + `pr-playwright-tests`. Our new `SmooAI/chat-widget` has none yet.
+Mature platforms ship extensive web + Playwright suites. Our new `SmooAI/chat-widget` has none yet.
 - **TDD**: a Playwright spec first — load the widget against a locally-booted `smooth-operator-server`, send a message, assert streamed assistant tokens render + a grounded answer appears. Wire it into the widget repo's CI.
 
 ### G6. Deployment-integration tests in CI
-Onyx runs compose + k8s + helm tests in CI; we only `helm lint`/`helm template`.
+Mature knowledge platforms run compose + k8s + helm tests in CI; we only `helm lint`/`helm template`.
 - **TDD**: a `kind`-based CI job — `helm install` the chart into an ephemeral cluster with a pgvector Postgres, port-forward, run the protocol smoke (`ping`→`pong`, `create_conversation_session`) against the live pod. (Red until the image builds + chart serves — which the `SMOOTH_AGENT_BIND=0.0.0.0` fix already unblocked.)
 
 ### G7. Multi-tenancy
-Onyx supports multi-tenant schemas. Our org scoping is row-level only.
+Mature knowledge platforms support multi-tenant schemas. Our org scoping is row-level only.
 - **TDD**: `tests/multitenancy.rs` first — two orgs, assert full isolation across conversations/knowledge/checkpoints on both adapters. (Likely already passes for OLTP via `organizationId`; the test makes it a guarantee and covers the knowledge/S3-Vectors index-per-org path.)
 
 ### G8. Model-server parity (embedding/rerank)
-Onyx has a dedicated, tested model server (embeddings + rerank + intent). We have a pluggable `Embedder` + RRF, no rerank.
+Mature knowledge platforms have a dedicated, tested model server (embeddings + rerank + intent). We have a pluggable `Embedder` + RRF, no rerank.
 - **TDD**: `tests/rerank.rs` first — a deterministic cross-encoder-stub reranker; assert it reorders fused results by relevance. Then make rerank a pluggable stage (gateway/Cohere in prod, stub in tests), mirroring our `Embedder` pattern.
 
 ### G9. Connector mock + external-dependency split (test infra)
-Formalize Onyx's `mock_connector` + `external_dependency_unit` vs `unit` split so connectors are testable credential-free in CI and fully nightly.
+Formalize the platform.s `mock_connector` + `external_dependency_unit` vs `unit` split so connectors are testable credential-free in CI and fully nightly.
 - **TDD**: ship the `MockConnector` (G1) and a CI convention: `unit` (no creds, every PR) vs `external` (gated, nightly), matching our `SMOOTH_AGENT_E2E` gate.
 
 ## 4. TDD working agreement (applies to all of the above and beyond)

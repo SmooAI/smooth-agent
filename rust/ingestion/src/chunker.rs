@@ -1,4 +1,4 @@
-//! Document → chunks (Onyx-gap G2).
+//! Document → chunks (feature gap G2).
 //!
 //! The engine's `KnowledgeBase::ingest` chunks internally, but that's tuned for
 //! whole pre-formed documents. The ingestion pipeline owns its own chunker so

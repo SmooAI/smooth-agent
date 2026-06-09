@@ -17,7 +17,7 @@
 //! [`embedding`] (the text→vector [`Embedder`] + the network-free
 //! [`DeterministicEmbedder`], the one home for both the Postgres adapter and the
 //! ingestion pipeline) and [`rerank`] (the optional post-retrieval [`Reranker`]
-//! stage — Onyx-gap G8).
+//! stage — feature gap G8).
 
 pub mod access_control;
 pub mod adapter;

@@ -1,7 +1,7 @@
 //! Document sets, curation boosting, and query-time metadata filters
-//! (Onyx-gap, Phase 11 — "Document sets / curation / boosting").
+//! (feature gap, Phase 11 — "Document sets / curation / boosting").
 //!
-//! Onyx lets a curator (a) group documents into named **document sets** so a
+//! Curation lets a user (a) group documents into named **document sets** so a
 //! query can be scoped to "only the dev-support repo" or "only the HR handbook",
 //! (b) **boost** canonical documents (the README, the policy of record) so they
 //! outrank merely-similar matches, and (c) filter retrieval by arbitrary

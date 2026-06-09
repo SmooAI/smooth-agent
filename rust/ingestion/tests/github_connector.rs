@@ -1,4 +1,4 @@
-//! Headline acceptance test for the GitHub connector (Onyx-gap G1, the
+//! Headline acceptance test for the GitHub connector (feature gap G1, the
 //! `examples/dev-support` knowledge agent's primary source).
 //!
 //! TDD contract (written before the implementation): stand up a **mock GitHub

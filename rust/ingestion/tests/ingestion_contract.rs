@@ -1,4 +1,4 @@
-//! Headline acceptance test for the ingestion pipeline (Onyx-gap G1).
+//! Headline acceptance test for the ingestion pipeline (feature gap G1).
 //!
 //! TDD contract (written before the implementation): build a real in-memory
 //! `StorageAdapter` + a `DeterministicEmbedder` + a `MockConnector` carrying a

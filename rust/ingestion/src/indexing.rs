@@ -1,4 +1,4 @@
-//! Background / incremental indexing (Onyx-gap Phase 11).
+//! Background / incremental indexing (feature gap Phase 11).
 //!
 //! A connector should re-index on a schedule, pulling only what changed, with
 //! per-run status tracking. This module is the *engine* of that loop — the

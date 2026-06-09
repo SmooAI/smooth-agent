@@ -1,5 +1,5 @@
 //! Document sets, curation boosting, and query-time metadata filters
-//! (Onyx-gap, Phase 11) — the offline, in-memory integration tests.
+//! (feature gap, Phase 11) — the offline, in-memory integration tests.
 //!
 //! Written **test-first** (TDD): each assertion below describes a guarantee of
 //! the curation layer before reaching for the implementation —
