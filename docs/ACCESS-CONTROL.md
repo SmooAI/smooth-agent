@@ -108,6 +108,41 @@ principal's **groups**, parsed from a `groups` claim on the JWT (`auth.rs`,
 `github:owner/repo` document ACL — a private-repo doc scoped to that group is
 readable only by a principal carrying it.
 
+### Bring-your-own auth — the JWT contract
+
+smooth-operator does **not** require you to adopt its identity provider. Point it
+at your own auth (SSO/IdP) and have *that* mint the access tokens. The server only
+needs a key to verify them and a handful of claims:
+
+**Server config (env):**
+
+| Var | Value |
+| --- | ----- |
+| `AUTH_MODE` | `jwt` |
+| `AUTH_JWT_RS256_PUBLIC_KEY` *or* `AUTH_JWT_HS256_SECRET` | your IdP's verification key (RS256 PEM, or an HS256 shared secret) |
+| `AUTH_JWT_ISSUER` / `AUTH_JWT_AUDIENCE` | *(optional)* enforce `iss`/`aud` when set |
+
+**The JWT your IdP issues** (signed with the key above):
+
+```jsonc
+{
+  "sub":    "u_123",                              // → user_id (matches DocAcl.users)
+  "org":    "topstep",                            // → org_id (org isolation); `org_id` also accepted
+  "role":   "basic",                              // admin | curator | basic (admin-API RBAC)
+  "groups": ["github:topstep/svc-pricing",        // → the entitlements that gate document access;
+             "github:topstep/svc-orders"],        //   a doc scoped to a group is readable only by a carrier
+  "exp":    1750000000                            // required
+}
+```
+
+That's the whole contract: **`sub` + `org` + `role` + `groups` + `exp`.** Your IdP
+decides which `groups` each user carries (e.g. map your SSO groups / GitHub team
+membership to `github:owner/repo` strings) — the server enforces them at retrieval
+with zero additional code. The widget/clients send the token on the `/ws` `?token=`
+query param (reference server) or the `send_message` `token` field (Lambda); see
+[`/ws` authentication](#ws-authentication--accesscontext) above. No token ⇒
+anonymous ⇒ org-public only (fail closed).
+
 ## Durable persistence (Postgres + DynamoDB)
 
 The in-memory ACL side table dies with its process. The durable backends persist
