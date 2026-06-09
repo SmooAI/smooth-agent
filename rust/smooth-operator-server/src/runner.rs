@@ -34,6 +34,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use smooth_operator::access_control::AccessContext;
 use smooth_operator::adapter::{MessageQuery, StorageAdapter};
 use smooth_operator::domain::{Citation, Direction, Message as DomainMessage, MessageContent};
+use smooth_operator::rerank::Reranker;
 use smooth_operator::tools::{KnowledgeResultSink, KnowledgeSearchTool};
 use smooth_operator::MAX_CITATIONS;
 
@@ -101,6 +102,12 @@ pub struct TurnRequest<'a> {
     /// deterministically offline. `None` in production (a live client is built
     /// from `llm`).
     pub llm_provider: Option<Arc<dyn LlmProvider>>,
+    /// Optional post-retrieval reranker (feature gap G8). When `Some`, the
+    /// `knowledge_search` tool overfetches candidates and reorders the top-K with
+    /// this reranker before they reach the model. `None` (the default) keeps the
+    /// retrieval order unchanged, so default behavior is byte-for-byte the same.
+    /// Selected by [`build_reranker`](crate::reranker::build_reranker).
+    pub reranker: Option<Arc<dyn Reranker>>,
 }
 
 /// Runs one knowledge-grounded, streaming turn for a session's conversation and
@@ -134,6 +141,7 @@ pub async fn run_streaming_turn(
         user_message,
         access,
         llm_provider,
+        reranker,
     } = req;
 
     // The ONE ACL-enforcing knowledge handle both retrieval paths read through.
@@ -176,10 +184,16 @@ pub async fn run_streaming_turn(
         .with_prior_messages(prior);
 
     let mut tools = ToolRegistry::new();
-    tools.register(
-        KnowledgeSearchTool::new(Arc::clone(&knowledge))
-            .with_result_sink(Arc::clone(&tool_sources)),
-    );
+    // Build the knowledge_search tool over the SAME ACL-filtered handle, with the
+    // citation sink and — when a reranker was selected (opt-in, G8) — the rerank
+    // stage. With `None` (the default) the tool fetches exactly `limit` and
+    // returns the retrieval order unchanged.
+    let mut knowledge_search = KnowledgeSearchTool::new(Arc::clone(&knowledge))
+        .with_result_sink(Arc::clone(&tool_sources));
+    if let Some(reranker) = reranker {
+        knowledge_search = knowledge_search.with_reranker(reranker);
+    }
+    tools.register(knowledge_search);
 
     let agent = {
         let agent = Agent::new(config, tools).with_checkpoint_store(storage.checkpoints());

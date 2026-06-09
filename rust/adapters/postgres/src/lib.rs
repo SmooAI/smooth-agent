@@ -32,6 +32,7 @@
 mod admin;
 mod embedder;
 mod knowledge;
+mod reranker;
 mod schema;
 
 use std::sync::Arc;
@@ -60,6 +61,9 @@ use smooth_operator_core::{CheckpointStore, KnowledgeBase};
 pub use admin::{PgConnectorConfigStore, PgIndexingStore, PgSettingsStore};
 pub use embedder::{GatewayEmbedder, OPENAI_SMALL_EMBEDDING_DIM};
 pub use knowledge::PgKnowledgeBase;
+pub use reranker::{
+    GatewayReranker, HttpRerankBackend, RerankBackend, RerankScore, DEFAULT_RERANK_MODEL,
+};
 pub use smooth_operator::embedding::{
     DeterministicEmbedder, Embedder, InputType, DEFAULT_EMBEDDING_DIM,
 };

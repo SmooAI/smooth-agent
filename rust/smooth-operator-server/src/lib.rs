@@ -36,12 +36,14 @@ pub mod config;
 pub mod embedder;
 pub mod handler;
 pub mod protocol;
+pub mod reranker;
 pub mod runner;
 pub mod server;
 pub mod state;
 
 pub use config::ServerConfig;
 pub use embedder::{build_embedder, EmbedderConfig};
+pub use reranker::{build_reranker, RerankMode, RerankerConfig};
 pub use server::{
     bind, build_state, build_state_from_env, build_state_from_env_async, router, run,
 };

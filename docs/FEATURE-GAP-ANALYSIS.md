@@ -70,9 +70,9 @@ Mature knowledge platforms run compose + k8s + helm tests in CI; we only `helm l
 Mature knowledge platforms support multi-tenant schemas. Our org scoping is row-level only.
 - **TDD**: `tests/multitenancy.rs` first — two orgs, assert full isolation across conversations/knowledge/checkpoints on both adapters. (Likely already passes for OLTP via `organizationId`; the test makes it a guarantee and covers the knowledge/S3-Vectors index-per-org path.)
 
-### G8. Model-server parity (embedding/rerank)
-Mature knowledge platforms have a dedicated, tested model server (embeddings + rerank + intent). We have a pluggable `Embedder` + RRF, no rerank.
-- **TDD**: `tests/rerank.rs` first — a deterministic cross-encoder-stub reranker; assert it reorders fused results by relevance. Then make rerank a pluggable stage (gateway/Cohere in prod, stub in tests), mirroring our `Embedder` pattern.
+### G8. Model-server parity (embedding/rerank) — ✅ rerank stage shipped
+Mature knowledge platforms have a dedicated, tested model server (embeddings + rerank + intent). We have a pluggable `Embedder` + RRF; the rerank stage is now implemented as a pluggable seam mirroring the `Embedder` pattern.
+- **TDD (done)**: the `Reranker` trait (`smooth_operator::rerank`) ships `NoopReranker` (identity default) + `LexicalReranker` (deterministic, network-free) + the production **`GatewayReranker`** (adapter crate, alongside `GatewayEmbedder`): a Cohere/Voyage-style `/v1/rerank` cross-encoder over the SmooAI gateway, key from `SMOOAI_GATEWAY_*`. It reorders candidates by returned relevance, truncates to `top_k`, and falls back to input order on any API error (never panics, never drops the turn). A `RerankBackend` seam lets unit tests inject a stub so reorder/truncate/error-fallback are exercised offline (mirrors `GithubSearchBackend`). The server's `build_reranker` selector (mirrors `build_embedder`) picks gateway-when-keyed / lexical / noop from `SMOOTH_AGENT_RERANK`, defaulting **off** so existing behavior is unchanged. Wired into the retrieval path via `KnowledgeSearchTool::with_reranker(...)` (over-fetch → rerank → truncate) in both the reference server and the lambda. A live test is gated on `SMOOTH_AGENT_E2E=1` + a real `/v1/rerank` route (`#[ignore]`).
 
 ### G9. Connector mock + external-dependency split (test infra)
 Formalize the platform.s `mock_connector` + `external_dependency_unit` vs `unit` split so connectors are testable credential-free in CI and fully nightly.

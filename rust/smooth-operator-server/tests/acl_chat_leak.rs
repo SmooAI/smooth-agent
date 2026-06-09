@@ -125,6 +125,7 @@ async fn run_turn_as(
             user_message: "Tell me about alpha",
             access,
             llm_provider: Some(Arc::new(mock.clone())),
+            reranker: None,
         },
         &tx,
     )

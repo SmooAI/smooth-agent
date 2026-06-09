@@ -489,6 +489,15 @@ async fn send_message(
             user_message: &message,
             access,
             llm_provider: None,
+            // Opt-in rerank stage (feature gap G8): `None` unless the operator
+            // enabled it via `SMOOTH_AGENT_RERANK`. Default-off keeps retrieval
+            // behavior unchanged.
+            reranker: smooth_operator_server::reranker::build_reranker(
+                &smooth_operator_server::reranker::RerankerConfig::from_gateway(
+                    config.gateway_url.clone(),
+                    config.gateway_key.clone(),
+                ),
+            ),
         },
         &tx,
     )

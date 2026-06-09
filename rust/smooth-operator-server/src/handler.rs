@@ -375,6 +375,12 @@ async fn handle_send_message(
             // connection is anonymous).
             access: access.clone(),
             llm_provider: None,
+            // Opt-in rerank stage (feature gap G8): `None` unless the operator
+            // enabled it via `SMOOTH_AGENT_RERANK` (gateway/lexical). Default-off
+            // keeps retrieval behavior unchanged.
+            reranker: crate::reranker::build_reranker(
+                &crate::reranker::RerankerConfig::from_server_config(&state.config),
+            ),
         },
         sink,
     )
