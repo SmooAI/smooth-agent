@@ -112,6 +112,13 @@ pub struct Principal {
     /// Optional human-readable name (the JWT `name`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
+    /// The groups the principal belongs to (the JWT `groups` claim). These are
+    /// the entitlements the document-level ACL layer matches against: a
+    /// document scoped to group `github:owner/repo` is readable only by a
+    /// principal carrying that group. Empty when the token has no `groups`
+    /// claim (the principal then sees only org-public + user-scoped docs).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<String>,
 }
 
 impl Principal {
@@ -128,7 +135,21 @@ impl Principal {
             org_id: org_id.into(),
             role,
             display_name,
+            groups: Vec::new(),
         }
+    }
+
+    /// Attach group memberships to this principal (builder). The groups flow
+    /// into [`access_context`](Self::access_context) so the document-level ACL
+    /// layer can match a group-scoped document.
+    #[must_use]
+    pub fn with_groups<I, S>(mut self, groups: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.groups = groups.into_iter().map(Into::into).collect();
+        self
     }
 
     /// Whether this principal may act at `min` or above.
@@ -138,12 +159,13 @@ impl Principal {
     }
 
     /// Map this principal to the document-level [`AccessContext`] used by the
-    /// knowledge-retrieval ACL layer. The user id carries through; group
-    /// membership is resolved upstream (empty here — wired when group claims
-    /// land).
+    /// knowledge-retrieval ACL layer. Both the user id **and** the principal's
+    /// groups carry through, so a retrieval as this principal can match a
+    /// document scoped to the user *or* to any group the principal belongs to
+    /// (the JWT `groups` claim — see [`Claims`]).
     #[must_use]
     pub fn access_context(&self) -> AccessContext {
-        AccessContext::for_user(self.user_id.clone())
+        AccessContext::new(Some(self.user_id.clone()), self.groups.clone())
     }
 }
 
@@ -223,6 +245,11 @@ struct Claims {
     role: Option<String>,
     #[serde(default)]
     name: Option<String>,
+    /// Group memberships (entitlements) — the document-level ACL layer matches
+    /// these against a document's group allow-list. Optional; absent ⇒ no group
+    /// entitlements (the principal sees only org-public + user-scoped docs).
+    #[serde(default)]
+    groups: Vec<String>,
 }
 
 impl Claims {
@@ -246,6 +273,7 @@ impl Claims {
             org_id,
             role,
             display_name: self.name,
+            groups: self.groups,
         })
     }
 }
@@ -671,6 +699,47 @@ mod tests {
         assert_eq!(p.org_id, "org-abc");
         assert_eq!(p.role, Role::Curator);
         assert_eq!(p.display_name.as_deref(), Some("Ada Lovelace"));
+    }
+
+    #[test]
+    fn jwt_verifier_parses_groups_claim_into_access_context() {
+        // A token carrying a `groups` claim must surface those groups on the
+        // Principal AND in the derived AccessContext — this is what lets a user
+        // match a `github:owner/repo` document ACL on the chat retrieval path.
+        let verifier = JwtVerifier::hs256(SECRET, None, None);
+        let token = sign(json!({
+            "sub": "user-7",
+            "org": "org-x",
+            "role": "basic",
+            "groups": ["github:acme/secret", "eng"],
+            "exp": future_exp(),
+        }));
+        let p = verifier.verify(&token).expect("verify");
+        assert_eq!(p.groups, vec!["github:acme/secret", "eng"]);
+
+        let ctx = p.access_context();
+        assert_eq!(ctx.user_id.as_deref(), Some("user-7"));
+        assert!(ctx.groups.contains(&"github:acme/secret".to_string()));
+        // And it can read a doc scoped to one of its groups.
+        let acl = crate::access_control::DocAcl::for_groups(["github:acme/secret"]);
+        assert!(ctx.can_access(&acl), "group-scoped doc must be accessible");
+    }
+
+    #[test]
+    fn jwt_verifier_no_groups_claim_yields_no_group_entitlements() {
+        // No `groups` claim ⇒ empty groups ⇒ the principal cannot match a
+        // group-scoped (private-repo) document.
+        let verifier = JwtVerifier::hs256(SECRET, None, None);
+        let token = sign(json!({
+            "sub": "user-8", "org": "org-x", "role": "basic", "exp": future_exp(),
+        }));
+        let p = verifier.verify(&token).expect("verify");
+        assert!(p.groups.is_empty());
+        let acl = crate::access_control::DocAcl::for_groups(["github:acme/secret"]);
+        assert!(
+            !p.access_context().can_access(&acl),
+            "LEAK: a principal with no groups must NOT read a group-scoped doc"
+        );
     }
 
     #[test]

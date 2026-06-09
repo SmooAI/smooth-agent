@@ -10,12 +10,14 @@
 use serde_json::{json, Value};
 use tokio::sync::mpsc::UnboundedSender;
 
+use smooth_operator::access_control::AccessContext;
 use smooth_operator::domain::{
     Conversation, Participant, ParticipantType, Platform, Session, SessionStatus,
 };
 
 use crate::protocol;
 use crate::runner;
+use crate::runner::TurnRequest;
 use crate::state::AppState;
 
 /// The agent's display name for the reference server.
@@ -24,7 +26,12 @@ const AGENT_NAME: &str = "smooth-agent";
 /// Parse and dispatch a single inbound text frame. Any produced events are sent
 /// through `sink`. Returns `Ok(())` always — protocol-level failures are
 /// surfaced as `error` events, never as hard errors that drop the connection.
-pub async fn handle_frame(state: &AppState, raw: &str, sink: &UnboundedSender<Value>) {
+pub async fn handle_frame(
+    state: &AppState,
+    access: &AccessContext,
+    raw: &str,
+    sink: &UnboundedSender<Value>,
+) {
     let parsed: Value = match serde_json::from_str(raw) {
         Ok(v) => v,
         Err(e) => {
@@ -51,7 +58,7 @@ pub async fn handle_frame(state: &AppState, raw: &str, sink: &UnboundedSender<Va
             handle_get_session(state, &parsed, request_id, sink);
         }
         Some("send_message") => {
-            handle_send_message(state, &parsed, request_id, sink).await;
+            handle_send_message(state, access, &parsed, request_id, sink).await;
         }
         Some(other) => {
             let _ = sink.send(protocol::error(
@@ -100,7 +107,10 @@ fn handle_create_session(
         .map(str::to_string);
 
     let now = chrono::Utc::now();
-    let org_id = "reference-org".to_string();
+    // The reference server is single-org; conversations belong to the seed org so
+    // the admin API's org-scoping (document sets, indexing runs) lines up with
+    // the seeded knowledge. A multi-tenant deployment derives this from auth.
+    let org_id = crate::server::SEED_ORG_ID.to_string();
 
     let conversation_id = uuid::Uuid::new_v4().to_string();
     let session_id = uuid::Uuid::new_v4().to_string();
@@ -287,6 +297,7 @@ fn handle_get_session(
 /// session, agent failure) surface as clean `error` events.
 async fn handle_send_message(
     state: &AppState,
+    access: &AccessContext,
     parsed: &Value,
     request_id: Option<&str>,
     sink: &UnboundedSender<Value>,
@@ -352,12 +363,19 @@ async fn handle_send_message(
     ));
 
     let result = runner::run_streaming_turn(
-        state.storage.clone(),
-        llm,
-        state.config.max_iterations,
-        &session.conversation_id,
-        request_id,
-        &message,
+        TurnRequest {
+            storage: state.storage.clone(),
+            llm,
+            max_iterations: state.config.max_iterations,
+            conversation_id: &session.conversation_id,
+            request_id,
+            user_message: &message,
+            // The connection's resolved document-level entitlement: retrieval is
+            // filtered to what this requester may read (org-public only when the
+            // connection is anonymous).
+            access: access.clone(),
+            llm_provider: None,
+        },
         sink,
     )
     .await;

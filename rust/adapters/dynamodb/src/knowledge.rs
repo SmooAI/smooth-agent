@@ -29,6 +29,7 @@ use tokio::runtime::Handle;
 
 use smooth_operator_core::{Document, KnowledgeBase, KnowledgeResult};
 
+use smooth_operator::access_control::{AccessContext, DocAcl};
 use smooth_operator::embedding::{cosine_similarity, Embedder, InputType};
 
 use crate::checkpoint::aws_err;
@@ -56,6 +57,12 @@ pub struct DynamoKnowledgeBase {
     /// fixed org keeps the brute-force scan scoped to one partition.
     organization_id: String,
     backend: KnowledgeBackend,
+    /// Optional document-level access control (feature gap G3). When set, the
+    /// brute-force scan drops every document the requester is not entitled to
+    /// (reading the stored `acl` attribute back per item) before ranking. `None`
+    /// ⇒ org isolation only. Set by
+    /// [`DynamoDbAdapter::knowledge_for_access`](crate::DynamoDbAdapter).
+    access: Option<AccessContext>,
     #[cfg(feature = "s3-vectors")]
     s3vectors: Option<Arc<crate::s3vectors::S3VectorsStore>>,
 }
@@ -84,8 +91,22 @@ impl DynamoKnowledgeBase {
             handle,
             organization_id: organization_id.into(),
             backend,
+            access: None,
             #[cfg(feature = "s3-vectors")]
             s3vectors,
+        }
+    }
+
+    /// A clone of this knowledge base whose queries enforce the given
+    /// [`AccessContext`]'s document-level entitlements (post-filtering the
+    /// brute-force scan against each item's stored `acl` attribute). Used by
+    /// [`DynamoDbAdapter::knowledge_for_access`](crate::DynamoDbAdapter) on the
+    /// chat retrieval path.
+    #[must_use]
+    pub fn with_access(&self, access: AccessContext) -> Self {
+        Self {
+            access: Some(access),
+            ..self.clone()
         }
     }
 
@@ -122,13 +143,21 @@ impl DynamoKnowledgeBase {
         // Always persist the document + metadata in DynamoDB (the OLTP owner of
         // doc metadata, per STORAGE.md) — both backends store it here.
         let metadata = serde_json::to_string(&doc.metadata)?;
+        // Persist the document's ACL (feature gap G3) as a discrete attribute so
+        // it survives the ingest→serve boundary and the brute-force scan can
+        // post-filter on it. Parsed from the same `acl_v2` metadata key the
+        // in-memory + Postgres stores use; absent ⇒ no attribute ⇒ org-public.
+        let acl = DocAcl::from_metadata(&doc.metadata)
+            .map(|a| serde_json::to_string(&a))
+            .transpose()?;
         let embedding_av = AttributeValue::L(
             embedding
                 .iter()
                 .map(|f| AttributeValue::N(f.to_string()))
                 .collect(),
         );
-        self.client
+        let mut put = self
+            .client
             .put_item()
             .table_name(&self.table)
             .item(
@@ -141,8 +170,11 @@ impl DynamoKnowledgeBase {
             .item("source", AttributeValue::S(doc.source.clone()))
             .item("content", AttributeValue::S(doc.content.clone()))
             .item("metadata", AttributeValue::S(metadata))
-            .item(attr::EMBEDDING, embedding_av)
-            .send()
+            .item(attr::EMBEDDING, embedding_av);
+        if let Some(acl_json) = acl {
+            put = put.item("acl", AttributeValue::S(acl_json));
+        }
+        put.send()
             .await
             .map_err(|e| anyhow!("dynamodb put knowledge: {}", aws_err(e)))?;
 
@@ -232,6 +264,22 @@ impl DynamoKnowledgeBase {
                     .unwrap_or_default();
                 if embedding.is_empty() {
                     continue;
+                }
+                // Document-level ACL (feature gap G3): when this handle is
+                // access-bound, drop any item the requester is not entitled to.
+                // The stored `acl` attribute (if present) is the serialized
+                // DocAcl; absent ⇒ org-public (backward-compatible default).
+                if let Some(ctx) = &self.access {
+                    let acl = item
+                        .get("acl")
+                        .and_then(|v| v.as_s().ok())
+                        .and_then(|s| serde_json::from_str::<DocAcl>(s).ok());
+                    // No recorded ACL ⇒ org-public ⇒ allowed; otherwise gate on
+                    // the requester's entitlements.
+                    let allowed = acl.as_ref().is_none_or(|a| ctx.can_access(a));
+                    if !allowed {
+                        continue;
+                    }
                 }
                 let score = cosine_similarity(query_vec, &embedding);
                 let document_id = item

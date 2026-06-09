@@ -46,15 +46,26 @@ pub struct AppState {
     pub settings: Arc<dyn SettingsStore>,
     /// Session registry: `sessionId` → session blob. Shared across connections.
     sessions: Arc<RwLock<HashMap<String, Session>>>,
-    /// Document-set registry: set name → document count. The in-memory knowledge
-    /// backend drops document metadata on ingest, so the admin API reads
-    /// document-set membership from this side registry (populated as docs are
-    /// seeded / ingested through the server). Connector names are also recorded
-    /// for `GET /admin/indexing/runs`.
-    doc_sets: Arc<RwLock<HashMap<String, usize>>>,
-    /// Connector names whose indexing runs should be listed (the
-    /// `InMemoryIndexingStore` lists per-connector). Recorded as runs are added.
-    connectors: Arc<RwLock<Vec<String>>>,
+    /// Document-set registry, **org-scoped**: `org_id` → (set name → document
+    /// count). The in-memory knowledge backend drops document metadata on
+    /// ingest, so the admin API reads document-set membership from this side
+    /// registry. Keyed by org so org A's document sets are never reported to an
+    /// org-B caller (cross-org leak fix — SMOODEV access-control hardening).
+    doc_sets: Arc<RwLock<HashMap<String, HashMap<String, usize>>>>,
+    /// Connector registry, **org-scoped**: `org_id` → set of connector names
+    /// whose indexing runs should be listed. Keyed by org so a same-named
+    /// connector in two orgs does not collide, and `GET /admin/indexing/runs`
+    /// only ever lists the caller's org's connectors.
+    connectors: Arc<RwLock<HashMap<String, Vec<String>>>>,
+}
+
+/// Namespace a connector name by org for the [`IndexingStore`] key, so two orgs
+/// with a same-named connector (`"docs"`) record + list **separate** runs. The
+/// `\u{1}` separator can't appear in a user-supplied connector name, so it can't
+/// be spoofed to cross an org boundary.
+#[must_use]
+pub fn scoped_connector_key(org_id: &str, connector_name: &str) -> String {
+    format!("IXCONN#{org_id}\u{1}{connector_name}")
 }
 
 impl AppState {
@@ -75,7 +86,7 @@ impl AppState {
             settings: Arc::new(InMemorySettingsStore::new()),
             sessions: Arc::new(RwLock::new(HashMap::new())),
             doc_sets: Arc::new(RwLock::new(HashMap::new())),
-            connectors: Arc::new(RwLock::new(Vec::new())),
+            connectors: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -120,45 +131,56 @@ impl AppState {
         self.sessions.read().ok()?.get(session_id).cloned()
     }
 
-    /// Record that a document was added to a named document set (increments its
-    /// count). Used by seeding + the ingest path so `GET /admin/document-sets`
-    /// can report set names + counts despite the in-memory backend dropping
-    /// document metadata.
-    pub fn record_document_set(&self, set: impl Into<String>) {
+    /// Record that a document was added to a named document set **within an org**
+    /// (increments its count). Used by seeding + the ingest path so
+    /// `GET /admin/document-sets` can report set names + counts despite the
+    /// in-memory backend dropping document metadata. Org-scoped so org A's sets
+    /// are never reported to an org-B caller.
+    pub fn record_document_set(&self, org_id: impl Into<String>, set: impl Into<String>) {
         if let Ok(mut map) = self.doc_sets.write() {
-            *map.entry(set.into()).or_insert(0) += 1;
+            *map.entry(org_id.into())
+                .or_default()
+                .entry(set.into())
+                .or_insert(0) += 1;
         }
     }
 
-    /// Snapshot the document-set registry as `(name, count)` pairs, sorted by
-    /// name for a stable response.
+    /// Snapshot **one org's** document-set registry as `(name, count)` pairs,
+    /// sorted by name for a stable response. Never returns another org's sets.
     #[must_use]
-    pub fn document_sets(&self) -> Vec<(String, usize)> {
+    pub fn document_sets(&self, org_id: &str) -> Vec<(String, usize)> {
         let Ok(map) = self.doc_sets.read() else {
             return Vec::new();
         };
-        let mut out: Vec<(String, usize)> = map.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        let Some(org_sets) = map.get(org_id) else {
+            return Vec::new();
+        };
+        let mut out: Vec<(String, usize)> = org_sets.iter().map(|(k, v)| (k.clone(), *v)).collect();
         out.sort_by(|a, b| a.0.cmp(&b.0));
         out
     }
 
-    /// Record a connector whose indexing runs should be listed (idempotent).
-    pub fn record_connector(&self, name: impl Into<String>) {
+    /// Record a connector (within an org) whose indexing runs should be listed
+    /// (idempotent). Org-scoped so a same-named connector in two orgs records
+    /// separately and `GET /admin/indexing/runs` only lists the caller's org's.
+    pub fn record_connector(&self, org_id: impl Into<String>, name: impl Into<String>) {
         let name = name.into();
-        if let Ok(mut v) = self.connectors.write() {
+        if let Ok(mut map) = self.connectors.write() {
+            let v = map.entry(org_id.into()).or_default();
             if !v.iter().any(|c| c == &name) {
                 v.push(name);
             }
         }
     }
 
-    /// Snapshot the recorded connector names (sorted, stable).
+    /// Snapshot **one org's** recorded connector names (sorted, stable). Never
+    /// returns another org's connectors.
     #[must_use]
-    pub fn connectors(&self) -> Vec<String> {
-        let Ok(v) = self.connectors.read() else {
+    pub fn connectors(&self, org_id: &str) -> Vec<String> {
+        let Ok(map) = self.connectors.read() else {
             return Vec::new();
         };
-        let mut out = v.clone();
+        let mut out = map.get(org_id).cloned().unwrap_or_default();
         out.sort();
         out
     }

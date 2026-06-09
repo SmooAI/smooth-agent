@@ -40,6 +40,7 @@ use aws_lambda_events::apigw::{ApiGatewayProxyResponse, ApiGatewayWebsocketProxy
 use lambda_runtime::{service_fn, Error, LambdaEvent};
 
 use smooth_operator::adapter::StorageAdapter;
+use smooth_operator::auth::AuthVerifier;
 use smooth_operator_adapter_dynamodb::DynamoDbAdapter;
 
 use crate::config::LambdaConfig;
@@ -52,6 +53,12 @@ use crate::poster::ConnectionPoster;
 struct Shared {
     config: LambdaConfig,
     adapter: Arc<DynamoDbAdapter>,
+    /// The env-configured, secure-by-default auth verifier (see
+    /// [`smooth_operator::auth::AuthConfig`]). Used to turn a per-frame bearer
+    /// `token` into the requester's document-level [`AccessContext`] so chat
+    /// retrieval is access-controlled. A `send_message` with no/invalid token
+    /// runs anonymous (org-public knowledge only — fail closed for ACL'd docs).
+    auth: Arc<dyn AuthVerifier>,
 }
 
 static SHARED: OnceLock<Shared> = OnceLock::new();
@@ -67,15 +74,27 @@ async fn main() -> Result<(), Error> {
     // it for every invocation without rebuilding AWS clients.
     let config = LambdaConfig::from_env();
     let adapter = adapter::build_storage(&config).await?;
+    // Secure-by-default auth verifier (jwt|smoo|none; disabled if unconfigured).
+    // A misconfiguration (e.g. AUTH_MODE=jwt with no key) is a hard cold-start
+    // error — the handler refuses to serve rather than silently run no-auth.
+    let auth: Arc<dyn AuthVerifier> = Arc::from(
+        smooth_operator::auth::AuthConfig::from_env()
+            .map_err(|e| Error::from(format!("auth configuration error: {e}")))?,
+    );
     tracing::info!(
         table = %config.table,
         org = %config.org_id,
         model = %config.model,
         llm_enabled = config.has_llm(),
         s3_vectors = config.vector_bucket.is_some(),
+        auth_mode = auth.mode(),
         "smooth-operator-lambda cold start"
     );
-    let _ = SHARED.set(Shared { config, adapter });
+    let _ = SHARED.set(Shared {
+        config,
+        adapter,
+        auth,
+    });
 
     lambda_runtime::run(service_fn(handler)).await
 }
@@ -125,7 +144,9 @@ async fn handler(
             // + runner expect (cheap Arc clone).
             let storage: Arc<dyn StorageAdapter> = shared.adapter.clone();
 
-            if let Err(e) = dispatch::handle_frame(&storage, &shared.config, &poster, body).await {
+            if let Err(e) =
+                dispatch::handle_frame(&storage, &shared.config, &shared.auth, &poster, body).await
+            {
                 // A post-back failure (e.g. transient Management API error) is
                 // logged; we still ack the invocation so API Gateway doesn't
                 // retry an already-partially-streamed turn.

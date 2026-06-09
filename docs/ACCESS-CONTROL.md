@@ -33,11 +33,96 @@ wraps any inner `KnowledgeBase` and:
   backend, looks each result's ACL up in the side table, and drops any the
   requester cannot access.
 
-This is **backend-agnostic**: the same wrapper sits in front of the in-memory,
-Postgres, or DynamoDB knowledge base identically — the post-filter runs in our
-layer, after the backend's own org-scoped query. In-memory and Postgres paths
-are exercised by tests; DynamoDB follows the same post-filter (no per-backend
-ACL code).
+This wrapper is the **in-memory** enforcement path. Its ACL side table is
+process-local, so it cannot carry a document's ACL from the ingestion process to
+a separate serving process. For the durable backends the ACL is therefore
+**persisted with the document** and enforced from storage at read (see
+[Durable persistence](#durable-persistence-postgres--dynamodb) below) — so the
+guarantee survives the ingest→serve boundary, not just a single process.
+
+## The `StorageAdapter` ACL seam — `knowledge_for_access`
+
+Every backend exposes two knowledge handles through the `StorageAdapter` trait
+(`smooth-operator/src/adapter.rs`):
+
+- **`knowledge()`** — org isolation only. Used by ingest / admin / seeding. It
+  does **not** enforce within-org ACLs.
+- **`knowledge_for_access(&AccessContext)`** — an **ACL-enforcing** handle bound
+  to the requester. Its `query` returns only documents the requester is entitled
+  to read. **This is the handle the chat retrieval path MUST use.**
+
+Per backend:
+
+| Backend   | `knowledge_for_access` enforcement |
+| --------- | ---------------------------------- |
+| In-memory | Wraps the shared `AclKnowledgeStore` reader (side table populated at ingest). |
+| Postgres  | A `PgKnowledgeBase` clone bound to the `AccessContext`; filters in SQL against the stored `acl` column (a restricted row is never even fetched). |
+| DynamoDB  | A `DynamoKnowledgeBase` clone bound to the `AccessContext`; post-filters the brute-force scan against each item's stored `acl` attribute. |
+
+The default trait impl wraps `knowledge()` in an `AclKnowledgeStore` reader with
+an empty side table (every doc treated as org-public — the raw `knowledge()`
+behavior, not a regression). The three real backends override it to enforce
+durably.
+
+## Enforcement on the live chat path (server + lambda)
+
+> This closed the **#1 adversarial-review security finding**: the ACL layer was
+> dead on the live chat path, so a private GitHub repo was retrievable by **any**
+> chat user. The runner queried `storage.knowledge()` **raw** — no
+> `AccessContext`, no ACL reader — for both the auto-injected context and the
+> `knowledge_search` tool.
+
+The streaming chat runner (`smooth-operator-server/src/runner.rs`,
+`run_streaming_turn`) — used by **both** the reference WS server
+(`handler.rs`) and the production AWS Lambda (`smooth-operator-lambda/src/dispatch.rs`) —
+now takes an `AccessContext` on its `TurnRequest` and builds **one**
+`storage.knowledge_for_access(&access)` handle that feeds **both** retrieval
+surfaces:
+
+1. the engine's auto-injected `[Relevant knowledge]` context, and
+2. the agent's `knowledge_search` tool.
+
+A restricted document is dropped before it can reach the model **or** a citation.
+
+### `/ws` authentication → `AccessContext`
+
+- **Reference server**: the bearer JWT rides on the `?token=` query param of the
+  `/ws` upgrade (browsers can't set custom headers on a WebSocket handshake). It
+  is verified once at connect via the configured `AuthVerifier`, mapped to the
+  `Principal`'s `AccessContext`, and threaded into every turn on that connection.
+- **Lambda**: API Gateway WebSocket has no persistent socket, so the token rides
+  on the `send_message` frame (a `token` field), verified per frame.
+
+**Fail closed for ACL'd content.** When no token is presented, the verifier is
+unconfigured/disabled (dev/no-auth), or the token fails to verify, the connection
+runs as `AccessContext::anonymous()` — which sees **only org-public** knowledge,
+**not** every document. Verification failures are logged (never the token) and
+degrade to anonymous rather than dropping the connection, so the dev/no-auth case
+still serves org-public knowledge.
+
+### Groups come from the JWT
+
+`Principal::access_context()` now populates **both** the user id and the
+principal's **groups**, parsed from a `groups` claim on the JWT (`auth.rs`,
+`Claims.groups`). This is what lets an authenticated user match a
+`github:owner/repo` document ACL — a private-repo doc scoped to that group is
+readable only by a principal carrying it.
+
+## Durable persistence (Postgres + DynamoDB)
+
+The in-memory ACL side table dies with its process. The durable backends persist
+the `DocAcl` **with the document** so the ACL survives ingest(process)→serve(process):
+
+- **Postgres** — a `knowledge_vectors.acl JSONB` column, written at ingest from
+  the `acl_v2` metadata. `query_async` filters **in SQL**: a row is visible when
+  `acl IS NULL` (org-public) OR `acl->>'public'` is true OR the requester's user
+  id is in `acl->'users'` (jsonb `?`) OR any requester group is in `acl->'groups'`
+  (jsonb `?|`). The column is added idempotently (`ADD COLUMN IF NOT EXISTS`) so
+  an in-place upgrade picks it up.
+- **DynamoDB** — an `acl` string attribute on each knowledge item; the
+  brute-force scan parses it back and post-filters via `can_access`.
+
+"No ACL recorded ⇒ org-public" holds identically across all three backends.
 
 ## The model
 
@@ -140,6 +225,27 @@ Plus a `can_access` unit-test matrix in `src/access_control.rs` (public,
 user-match, user-no-match, group-match, group-no-match, empty-acl fully-locked,
 mixed user-or-group) and `DocAcl` metadata round-trip / malformed-is-absent
 tests.
+
+### Chat-path + persistence + cross-org tests (the live-path hardening)
+
+- **The headline chat-path leak test** — `smooth-operator-server/tests/acl_chat_leak.rs`
+  (written first, failed before the runner threaded an `AccessContext`). It runs
+  the **real** `run_streaming_turn` offline (a `MockLlmClient` scripts the
+  streaming `knowledge_search` call) over an in-memory store seeded with an
+  org-public doc and a private-repo doc scoped to group `github:acme/secret`,
+  and asserts: a user **without** the group (and an anonymous connection) never
+  see the private doc in the tool result the model reads **or** in any citation;
+  a user **with** the group does.
+- **Postgres persistence** — `adapters/postgres/tests/acl_persistence.rs`
+  (testcontainers): ingest an ACL'd doc through one adapter, then query through a
+  **fresh** adapter (a different process, in production) → the ACL is enforced
+  from the `acl` column, proving it survives the ingest→serve boundary.
+- **Groups-from-JWT** — `src/auth.rs` unit tests: a token's `groups` claim
+  surfaces on the `Principal` and its `AccessContext`, and a tokenless principal
+  cannot match a group-scoped doc.
+- **Cross-org admin scoping** — `smooth-operator-server/tests/admin_api.rs`:
+  org A's indexing runs + document sets are invisible to an org-B caller, and
+  two orgs with a same-named connector don't collide (see [ADMIN-API.md](ADMIN-API.md)).
 
 ## Related
 

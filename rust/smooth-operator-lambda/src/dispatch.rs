@@ -30,10 +30,13 @@ use anyhow::Result;
 use serde_json::{json, Value};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
+use smooth_operator::access_control::AccessContext;
 use smooth_operator::adapter::StorageAdapter;
+use smooth_operator::auth::AuthVerifier;
 use smooth_operator::domain::{
     Conversation, Participant, ParticipantType, Platform, Session, SessionStatus,
 };
+use smooth_operator_server::runner::TurnRequest;
 use smooth_operator_server::{protocol, runner};
 
 use crate::config::LambdaConfig;
@@ -52,6 +55,7 @@ const AGENT_NAME: &str = "smooth-agent";
 pub async fn handle_frame(
     storage: &Arc<dyn StorageAdapter>,
     config: &LambdaConfig,
+    auth: &Arc<dyn AuthVerifier>,
     poster: &ConnectionPoster,
     raw: &str,
 ) -> Result<()> {
@@ -83,7 +87,7 @@ pub async fn handle_frame(
             get_session(storage, poster, &parsed, request_id).await?;
         }
         Some("send_message") => {
-            send_message(storage, config, poster, &parsed, request_id).await?;
+            send_message(storage, config, auth, poster, &parsed, request_id).await?;
         }
         Some(other) => {
             poster
@@ -340,9 +344,42 @@ async fn get_session(
 /// knowledge-grounded turn over the DynamoDB adapter (reusing the server's
 /// runner), forward `stream_token` / `stream_chunk` to the connection as they
 /// happen, and finish with `eventual_response` (200).
+/// Resolve the requester's document-level [`AccessContext`] from the frame's
+/// bearer `token` field (the lambda transport has no persistent socket, so the
+/// token rides on the `send_message` frame).
+///
+/// **Fail closed for ACL'd content**: no `token`, an unconfigured/disabled
+/// verifier, or a token that fails to verify all yield
+/// [`AccessContext::anonymous`] — org-public knowledge only, never every
+/// document. A valid token yields the principal's full entitlement (user id +
+/// groups). Verification failures are logged (never the token) and degrade to
+/// anonymous so the no-auth/dev case still serves org-public knowledge.
+fn resolve_frame_access(auth: &Arc<dyn AuthVerifier>, parsed: &Value) -> AccessContext {
+    let Some(token) = parsed
+        .get("token")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+    else {
+        return AccessContext::anonymous();
+    };
+    match auth.verify(token) {
+        Ok(principal) => principal.access_context(),
+        Err(e) => {
+            tracing::warn!(
+                auth_mode = auth.mode(),
+                error = %e,
+                "send_message token failed verification; serving org-public knowledge only (anonymous)"
+            );
+            AccessContext::anonymous()
+        }
+    }
+}
+
 async fn send_message(
     storage: &Arc<dyn StorageAdapter>,
     config: &LambdaConfig,
+    auth: &Arc<dyn AuthVerifier>,
     poster: &ConnectionPoster,
     parsed: &Value,
     request_id: Option<&str>,
@@ -438,13 +475,21 @@ async fn send_message(
     let poster_for_drain = poster.clone();
     let drain = tokio::spawn(forward_events(rx, poster_for_drain));
 
+    // Resolve the requester's entitlement from the frame's bearer token, then
+    // run the turn through the ACL-enforcing knowledge path.
+    let access = resolve_frame_access(auth, parsed);
+
     let result = runner::run_streaming_turn(
-        storage.clone(),
-        llm,
-        config.max_iterations,
-        &session.conversation_id,
-        request_id,
-        &message,
+        TurnRequest {
+            storage: storage.clone(),
+            llm,
+            max_iterations: config.max_iterations,
+            conversation_id: &session.conversation_id,
+            request_id,
+            user_message: &message,
+            access,
+            llm_provider: None,
+        },
         &tx,
     )
     .await;

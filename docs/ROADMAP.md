@@ -91,7 +91,7 @@ Every client is generated from `spec/` (protocol-first) and validates the shared
 
 ## Phase 10 — Connectors & quality regression (partly done)
 
-- ✅ G1 ingestion framework (Connector/Chunker/pipeline + file/web). ✅ G3 document ACLs. ✅ G4 LLM-judge evals. ✅ G8 rerank. ✅ G5 widget Playwright e2e. ✅ G6 kind deploy smoke.
+- ✅ G1 ingestion framework (Connector/Chunker/pipeline + file/web). ✅ G3 document ACLs — **now enforced on the live chat path** (server + lambda read through `StorageAdapter::knowledge_for_access`), persisted durably (Postgres `acl` column filtered in SQL; DynamoDB `acl` attribute), `/ws` auth → `AccessContext` (fail closed to org-public), JWT `groups` claim wired; sibling cross-org admin leak fixed (org-keyed indexing-run + document-set registries). See [ACCESS-CONTROL.md](ACCESS-CONTROL.md). ✅ G4 LLM-judge evals. ✅ G8 rerank. ✅ G5 widget Playwright e2e. ✅ G6 kind deploy smoke.
 - ⬜ **GitHub connector** (README/docs/md + code + issues/PRs/discussions; GitHub App installation token / PAT) + a live `github_search` tool — first consumer = `examples/dev-support`.
 - ⬜ Connector breadth (the other SaaS sources).
 

@@ -24,7 +24,10 @@ use smooth_operator_server::state::AppState;
 use smooth_operator_server::{build_state, router};
 
 const SECRET: &[u8] = b"admin-api-test-secret";
-const ORG: &str = "org-acme";
+// The seeded knowledge / document sets are recorded under the reference
+// server's seed org (`server::SEED_ORG_ID`); the admin tests authenticate as
+// that org so the org-scoped admin reads (document sets, indexing runs) line up.
+const ORG: &str = "reference-org";
 
 /// A minimal config for an in-memory, seeded-KB server (no LLM key).
 fn test_config(seed_kb: bool) -> ServerConfig {
@@ -275,11 +278,13 @@ async fn messages_for_unknown_conversation_is_404() {
 #[tokio::test]
 async fn indexing_runs_requires_curator() {
     let store = Arc::new(InMemoryIndexingStore::new());
-    // Record one succeeded run for connector "github".
+    // Record one succeeded run for connector "github" under the ORG-NAMESPACED
+    // key the admin API now uses (cross-org scoping): runs are keyed by
+    // `scoped_connector_key(org, name)`, not the bare connector name.
     let now = chrono::Utc::now();
     store.record_run(&IndexingRun {
         id: "run-1".into(),
-        connector_name: "github".into(),
+        connector_name: smooth_operator_server::state::scoped_connector_key(ORG, "github"),
         status: IndexingRunStatus::Succeeded,
         started_at: now,
         finished_at: Some(now),
@@ -290,7 +295,7 @@ async fn indexing_runs_requires_curator() {
         error: None,
     });
     let state = state_with_auth(false, store);
-    state.record_connector("github");
+    state.record_connector(ORG, "github");
     let app = router(state);
 
     // Basic is forbidden.
@@ -351,5 +356,150 @@ async fn ws_route_still_works() {
         resp.status(),
         StatusCode::NOT_FOUND,
         "/ws route must remain"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Cross-org isolation (cross-org leak fix)
+// ---------------------------------------------------------------------------
+
+/// Sign a curator token for a SPECIFIC org (overrides the default [`ORG`]).
+fn token_for_org(user: &str, role: &str, org: &str) -> String {
+    let exp = (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp();
+    let claims = json!({
+        "sub": user, "org": org, "role": role,
+        "name": format!("{user} display"), "exp": exp,
+    });
+    encode(
+        &Header::new(Algorithm::HS256),
+        &claims,
+        &EncodingKey::from_secret(SECRET),
+    )
+    .expect("sign")
+}
+
+/// `GET /admin/indexing/runs`: org A's runs are NOT visible to an org-B caller,
+/// and two orgs with a **same-named** connector ("docs") see only their own
+/// runs (no key collision). This is the cross-org leak the fix closes — the
+/// indexing store was keyed by bare connector name, so org B saw org A's runs.
+#[tokio::test]
+async fn indexing_runs_are_org_scoped_and_same_name_connectors_dont_collide() {
+    use smooth_operator_server::state::scoped_connector_key;
+
+    let store = Arc::new(InMemoryIndexingStore::new());
+    let now = chrono::Utc::now();
+    let mk_run = |id: &str, key: String, seen: usize| IndexingRun {
+        id: id.into(),
+        connector_name: key,
+        status: IndexingRunStatus::Succeeded,
+        started_at: now,
+        finished_at: Some(now),
+        documents_seen: seen,
+        chunks_indexed: seen,
+        documents_skipped: 0,
+        cursor: Some(now),
+        error: None,
+    };
+    // Org A and Org B each have a connector NAMED "docs" — distinct runs.
+    store.record_run(&mk_run("run-a", scoped_connector_key("org-a", "docs"), 11));
+    store.record_run(&mk_run("run-b", scoped_connector_key("org-b", "docs"), 22));
+
+    let state = state_with_auth(false, store);
+    state.record_connector("org-a", "docs");
+    state.record_connector("org-b", "docs");
+    let app = router(state);
+
+    // Org A's curator sees ONLY org A's run (documentsSeen=11), never org B's.
+    let (status, body) = get(
+        &app,
+        "/admin/indexing/runs",
+        Some(&token_for_org("ua", "curator", "org-a")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let runs = body["runs"].as_array().expect("runs");
+    assert_eq!(
+        runs.len(),
+        1,
+        "org A must see exactly its own run: {body:?}"
+    );
+    assert_eq!(runs[0]["connectorName"], "docs");
+    assert_eq!(
+        runs[0]["documentsSeen"], 11,
+        "LEAK: org A saw a run that wasn't its own"
+    );
+
+    // Org B's curator sees ONLY org B's run (documentsSeen=22).
+    let (status, body) = get(
+        &app,
+        "/admin/indexing/runs",
+        Some(&token_for_org("ub", "curator", "org-b")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let runs = body["runs"].as_array().expect("runs");
+    assert_eq!(runs.len(), 1, "org B must see exactly its own run");
+    assert_eq!(
+        runs[0]["documentsSeen"], 22,
+        "LEAK: org B saw a run that wasn't its own"
+    );
+
+    // A THIRD org with nothing recorded sees nothing.
+    let (status, body) = get(
+        &app,
+        "/admin/indexing/runs",
+        Some(&token_for_org("uc", "curator", "org-c")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body["runs"].as_array().expect("runs").is_empty(),
+        "an org with no connectors must see no runs (no cross-org leak)"
+    );
+}
+
+/// `GET /admin/document-sets`: org A's document sets are NOT visible to an
+/// org-B caller. The doc-set registry was global (cross-org leak); it is now
+/// org-keyed.
+#[tokio::test]
+async fn document_sets_are_org_scoped() {
+    // Unseeded server so the only sets are the ones we record per org.
+    let state = state_with_auth(false, Arc::new(InMemoryIndexingStore::new()));
+    state.record_document_set("org-a", "handbook");
+    state.record_document_set("org-a", "handbook");
+    state.record_document_set("org-b", "secrets");
+    let app = router(state);
+
+    // Org A sees only "handbook" (count 2), never org B's "secrets".
+    let (status, body) = get(
+        &app,
+        "/admin/document-sets",
+        Some(&token_for_org("ua", "curator", "org-a")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let sets = body["documentSets"].as_array().expect("sets");
+    assert_eq!(sets.len(), 1, "org A sees exactly its own set: {body:?}");
+    assert_eq!(sets[0]["name"], "handbook");
+    assert_eq!(sets[0]["documentCount"], 2);
+    assert!(
+        !sets.iter().any(|s| s["name"] == "secrets"),
+        "LEAK: org A saw org B's document set"
+    );
+
+    // Org B sees only "secrets".
+    let (status, body) = get(
+        &app,
+        "/admin/document-sets",
+        Some(&token_for_org("ub", "curator", "org-b")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let sets = body["documentSets"].as_array().expect("sets");
+    assert_eq!(sets.len(), 1);
+    assert_eq!(sets[0]["name"], "secrets");
+    assert!(
+        !sets.iter().any(|s| s["name"] == "handbook"),
+        "LEAK: org B saw org A's document set"
     );
 }

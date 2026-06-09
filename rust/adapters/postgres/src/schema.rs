@@ -169,8 +169,18 @@ CREATE TABLE IF NOT EXISTS knowledge_vectors (
     embedding       vector({dim}) NOT NULL,
     content_tsv     tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
     metadata        JSONB,
+    -- Document-level access control (feature gap G3), persisted so the ACL
+    -- survives the ingest(process)→serve(process) boundary (the in-memory ACL
+    -- side table cannot). The serialized DocAcl (`{{public, users[], groups[]}}`)
+    -- the document carried at ingest; NULL ⇒ no ACL recorded ⇒ org-public
+    -- (backward-compatible default). The chat retrieval path filters rows by the
+    -- requester's entitlements against this column (see knowledge.rs query_async).
+    acl             JSONB,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Idempotent add for tables created before the ACL column existed (so an
+-- upgrade-in-place gets the column without a destructive migration).
+ALTER TABLE knowledge_vectors ADD COLUMN IF NOT EXISTS acl JSONB;
 -- Dense ANN: HNSW over cosine distance (the `<=>` operator).
 CREATE INDEX IF NOT EXISTS idx_knowledge_embedding_hnsw
     ON knowledge_vectors USING hnsw (embedding vector_cosine_ops);

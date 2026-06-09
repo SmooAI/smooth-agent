@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 
 use smooth_operator_core::{CheckpointStore, KnowledgeBase};
 
+use crate::access_control::AccessContext;
 use crate::domain::{Conversation, Message, Participant, Session, SessionStatus};
 
 /// Partial update for a conversation. `None` fields are left unchanged.
@@ -153,5 +154,35 @@ pub trait StorageAdapter: Send + Sync {
 
     /// The knowledge base, ready to hand to a smooth-operator `AgentConfig`
     /// via `AgentConfig::with_knowledge`. Synchronous trait.
+    ///
+    /// This handle performs **org isolation only** — it does not enforce
+    /// within-org document-level ACLs. The chat retrieval path MUST use
+    /// [`knowledge_for_access`](Self::knowledge_for_access) instead so a
+    /// restricted document (e.g. a private GitHub repo scoped to a group) is
+    /// never returned to a requester who lacks the entitlement.
     fn knowledge(&self) -> Arc<dyn KnowledgeBase>;
+
+    /// An **ACL-enforcing** knowledge handle bound to the requester's
+    /// [`AccessContext`]: its `query` returns only documents the requester is
+    /// entitled to read (org-public docs, docs the requester's user id is on, or
+    /// docs any of the requester's groups is on). This is the handle the chat
+    /// retrieval path (auto-injected context **and** the `knowledge_search`
+    /// tool) MUST read through — see `docs/ACCESS-CONTROL.md`.
+    ///
+    /// ## Default — **fail closed for ACL'd content**
+    ///
+    /// The default implementation wraps [`knowledge`](Self::knowledge) in an
+    /// [`AclKnowledgeStore`](crate::access_control::AclKnowledgeStore) reader.
+    /// Because that wrapper's ACL side table starts empty (the documents were
+    /// ingested through a different store instance), every document it sees is
+    /// treated as org-public — which is the *raw* `knowledge()` behavior and is
+    /// therefore **not** a regression, but also offers no within-org protection.
+    /// Backends that can persist + read back a document's ACL (the in-memory
+    /// adapter via a shared store; Postgres / DynamoDB via a stored ACL column)
+    /// **override** this method to enforce the ACL durably, so restricted docs
+    /// are dropped for unentitled requesters even across the ingest→serve
+    /// process boundary.
+    fn knowledge_for_access(&self, access: &AccessContext) -> Arc<dyn KnowledgeBase> {
+        crate::access_control::AclKnowledgeStore::new(self.knowledge()).reader(access.clone())
+    }
 }

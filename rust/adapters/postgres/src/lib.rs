@@ -42,6 +42,7 @@ use chrono::Utc;
 use deadpool_postgres::{Config as PoolConfig, ManagerConfig, Pool, RecyclingMethod, Runtime};
 use tokio_postgres::NoTls;
 
+use smooth_operator::access_control::AccessContext;
 use smooth_operator::adapter::{
     ConversationUpdate, MessagePage, MessageQuery, SessionUpdate, StorageAdapter,
 };
@@ -843,5 +844,14 @@ impl StorageAdapter for PostgresAdapter {
 
     fn knowledge(&self) -> Arc<dyn KnowledgeBase> {
         self.knowledge.clone()
+    }
+
+    fn knowledge_for_access(&self, access: &AccessContext) -> Arc<dyn KnowledgeBase> {
+        // Durable document-level ACL (feature gap G3): the returned handle
+        // filters every query by the requester's entitlements against the stored
+        // `acl` column **in SQL**, so a restricted document is never fetched —
+        // and the filter survives the ingest→serve process boundary (unlike the
+        // in-memory side table). See `knowledge::PgKnowledgeBase::query_async`.
+        Arc::new(self.knowledge.with_access(access.clone()))
     }
 }

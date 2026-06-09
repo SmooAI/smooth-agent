@@ -53,6 +53,7 @@ use aws_sdk_dynamodb::Client;
 use chrono::Utc;
 use tokio::runtime::Handle;
 
+use smooth_operator::access_control::AccessContext;
 use smooth_operator::adapter::{
     ConversationUpdate, MessagePage, MessageQuery, SessionUpdate, StorageAdapter,
 };
@@ -879,6 +880,15 @@ impl StorageAdapter for DynamoDbAdapter {
 
     fn knowledge(&self) -> Arc<dyn KnowledgeBase> {
         self.knowledge.clone()
+    }
+
+    fn knowledge_for_access(&self, access: &AccessContext) -> Arc<dyn KnowledgeBase> {
+        // Durable document-level ACL (feature gap G3): the returned handle
+        // post-filters the brute-force scan by the requester's entitlements
+        // against each item's stored `acl` attribute, so a restricted document
+        // is dropped before ranking — and the filter survives the ingest→serve
+        // process boundary (unlike the in-memory side table).
+        Arc::new(self.knowledge.with_access(access.clone()))
     }
 }
 

@@ -24,12 +24,14 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use serde_json::json;
+use smooth_operator_core::llm_provider::LlmProvider;
 use smooth_operator_core::{
-    Agent, AgentConfig, AgentEvent, KnowledgeResult, LlmConfig, Message as EngineMessage, Role,
-    ToolRegistry,
+    Agent, AgentConfig, AgentEvent, KnowledgeBase, KnowledgeResult, LlmConfig,
+    Message as EngineMessage, Role, ToolRegistry,
 };
 use tokio::sync::mpsc::UnboundedSender;
 
+use smooth_operator::access_control::AccessContext;
 use smooth_operator::adapter::{MessageQuery, StorageAdapter};
 use smooth_operator::domain::{Citation, Direction, Message as DomainMessage, MessageContent};
 use smooth_operator::tools::{KnowledgeResultSink, KnowledgeSearchTool};
@@ -71,31 +73,82 @@ pub struct TurnResult {
     pub citations: Vec<Citation>,
 }
 
+/// Everything one streaming turn needs. Bundled into a struct so the call sites
+/// (the reference server's `handle_send_message` and the lambda's
+/// `send_message`) stay readable and the security-critical [`access`](Self::access)
+/// field can never be silently dropped from a positional argument list.
+pub struct TurnRequest<'a> {
+    /// The storage seam (conversations / messages / sessions / knowledge).
+    pub storage: Arc<dyn StorageAdapter>,
+    /// The resolved LLM config for this turn.
+    pub llm: LlmConfig,
+    /// Agent-loop iteration cap.
+    pub max_iterations: u32,
+    /// The conversation this turn belongs to.
+    pub conversation_id: &'a str,
+    /// The protocol request id (streaming correlation).
+    pub request_id: &'a str,
+    /// The inbound user message.
+    pub user_message: &'a str,
+    /// **The requester's document-level entitlements.** Retrieval (the
+    /// auto-injected `[Relevant knowledge]` context AND the `knowledge_search`
+    /// tool) reads through `storage.knowledge_for_access(&access)`, so a
+    /// restricted document is never surfaced to a requester who lacks the
+    /// entitlement. An [`AccessContext::anonymous`] sees only org-public docs
+    /// (fail closed for ACL'd content).
+    pub access: AccessContext,
+    /// Optional test-injected LLM surface (a `MockLlmClient`) so the turn runs
+    /// deterministically offline. `None` in production (a live client is built
+    /// from `llm`).
+    pub llm_provider: Option<Arc<dyn LlmProvider>>,
+}
+
 /// Runs one knowledge-grounded, streaming turn for a session's conversation and
 /// emits protocol-shaped events through `sink` as they happen.
 ///
 /// `sink` receives ready-to-send `serde_json::Value` event envelopes (built by
 /// [`crate::protocol`]). The caller forwards them over the WebSocket.
 ///
+/// ## Access control (security-critical)
+///
+/// Both retrieval paths — the engine's auto-injected `[Relevant knowledge]`
+/// context and the agent's `knowledge_search` tool — read through
+/// [`StorageAdapter::knowledge_for_access`] bound to [`TurnRequest::access`],
+/// so a document the requester is not entitled to (e.g. a private-repo doc
+/// scoped to a group the requester is not in) is dropped before it can reach the
+/// model or a citation. See `docs/ACCESS-CONTROL.md`.
+///
 /// # Errors
 /// Returns an error if message persistence or the agent loop fails fatally. The
 /// caller converts this into a protocol `error` event.
 pub async fn run_streaming_turn(
-    storage: Arc<dyn StorageAdapter>,
-    llm: LlmConfig,
-    max_iterations: u32,
-    conversation_id: &str,
-    request_id: &str,
-    user_message: &str,
+    req: TurnRequest<'_>,
     sink: &UnboundedSender<serde_json::Value>,
 ) -> Result<TurnResult> {
+    let TurnRequest {
+        storage,
+        llm,
+        max_iterations,
+        conversation_id,
+        request_id,
+        user_message,
+        access,
+        llm_provider,
+    } = req;
+
+    // The ONE ACL-enforcing knowledge handle both retrieval paths read through.
+    // Built once from the requester's `AccessContext` so the auto-injected
+    // context query, the agent's `knowledge_search` tool, and the citation
+    // mirror all hit the SAME filtered view — a restricted doc can't leak in
+    // through one path while being dropped on another.
+    let knowledge: Arc<dyn KnowledgeBase> = storage.knowledge_for_access(&access);
+
     // 0. Mirror the engine's auto-injected `[Relevant knowledge]` query so the
     //    citations include the sources the FIRST LLM call was grounded with.
     //    Same query smooth-operator-core's `Agent` runs (`query(msg, 3)`),
-    //    against the same knowledge handle. Best-effort: a KB error yields no
+    //    against the same ACL-filtered handle. Best-effort: a KB error yields no
     //    auto-context citations.
-    let auto_sources: Vec<KnowledgeResult> = storage
-        .knowledge()
+    let auto_sources: Vec<KnowledgeResult> = knowledge
         .query(user_message, AUTO_CONTEXT_LIMIT)
         .unwrap_or_default();
     // Sink the knowledge_search tool records its structured results into, for
@@ -115,19 +168,28 @@ pub async fn run_streaming_turn(
     )
     .await?;
 
-    // 3. Build the agent: knowledge-grounded config + knowledge_search tool +
-    //    replayed prior messages for memory.
+    // 3. Build the agent: ACL-grounded config + knowledge_search tool (over the
+    //    SAME ACL-filtered handle) + replayed prior messages for memory.
     let config = AgentConfig::new("smooth-agent-chat", KNOWLEDGE_CHAT_SYSTEM_PROMPT, llm)
         .with_max_iterations(max_iterations)
-        .with_knowledge(storage.knowledge())
+        .with_knowledge(Arc::clone(&knowledge))
         .with_prior_messages(prior);
 
     let mut tools = ToolRegistry::new();
     tools.register(
-        KnowledgeSearchTool::new(storage.knowledge()).with_result_sink(Arc::clone(&tool_sources)),
+        KnowledgeSearchTool::new(Arc::clone(&knowledge))
+            .with_result_sink(Arc::clone(&tool_sources)),
     );
 
-    let agent = Agent::new(config, tools).with_checkpoint_store(storage.checkpoints());
+    let agent = {
+        let agent = Agent::new(config, tools).with_checkpoint_store(storage.checkpoints());
+        // Inject the mock LLM provider for offline/deterministic tests; in
+        // production a live client is built from `llm`.
+        match llm_provider {
+            Some(provider) => agent.with_llm_provider(provider),
+            None => agent,
+        }
+    };
 
     // 4. Run with the streaming channel and translate events as they arrive.
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<AgentEvent>();

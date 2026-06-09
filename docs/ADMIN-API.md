@@ -123,8 +123,8 @@ role; 404 cross-org / unknown).
 | `GET /admin/me` | Basic | The caller's `Principal`. |
 | `GET /admin/conversations?limit&cursor` | Basic | Org-scoped chat history. Admin/Curator: org-wide; Basic: own only. Offset-paged (`cursor` = start index, `nextCursor` when more). |
 | `GET /admin/conversations/{id}/messages` | Basic | Messages for one conversation (role-scoped — a Basic caller must own it). |
-| `GET /admin/indexing/runs` | Curator | Indexing-run status across the org's connectors (from the `IndexingStore`). |
-| `GET /admin/document-sets` | Curator | Distinct document-set names + doc counts. |
+| `GET /admin/indexing/runs` | Curator | Indexing-run status across **the caller's org's** connectors only (from the `IndexingStore`, keyed per-org — see [Cross-org scoping](#cross-org-scoping)). |
+| `GET /admin/document-sets` | Curator | Distinct document-set names + doc counts **for the caller's org** only. |
 | `GET /admin/connectors` | Curator | List this org's connector configs. |
 | `POST /admin/connectors` | **Admin** | Create a connector config (returns `201` + the created connector). |
 | `GET /admin/connectors/{id}` | Curator | One connector config (org-scoped; cross-org/unknown ⇒ `404`). |
@@ -239,6 +239,30 @@ This mirrors the document-level [`AccessContext`](ACCESS-CONTROL.md) model RBAC
 sits on top of: RBAC gates *which admin operations*; `AccessContext` gates *which
 documents* a retrieval returns.
 
+### Cross-org scoping
+
+`GET /admin/indexing/runs` and `GET /admin/document-sets` read from two side
+registries in `AppState`. Both are now **keyed per-org** so org A's data can
+never surface to an org-B caller (a previous cross-org leak — the registries were
+global, and the indexing store was keyed by bare connector name so a same-named
+connector in two orgs collided):
+
+- The **document-set registry** is `org_id → (set name → count)`;
+  `/admin/document-sets` returns only `principal.org_id`'s entry.
+- The **connector registry** is `org_id → [connector names]`;
+  `/admin/indexing/runs` iterates only the caller's org's connectors.
+- Indexing **runs** are recorded + listed under an **org-namespaced key**,
+  `scoped_connector_key(org_id, name)` = `IXCONN#<org>\u{1}<name>` (the `\u{1}`
+  separator can't appear in a user-supplied connector name, so it can't be
+  spoofed across an org boundary). The reported `connectorName` is always the
+  un-scoped display name — the namespace is an internal storage key, never
+  exposed. The `/index` handler builds the connector with this scoped name so its
+  run lands under the per-org key.
+
+Verified by `admin_api.rs`:
+`indexing_runs_are_org_scoped_and_same_name_connectors_dont_collide` and
+`document_sets_are_org_scoped`.
+
 ---
 
 ## Wiring + state
@@ -253,9 +277,13 @@ alongside the storage adapter and config:
   **name**) not a credential.
 - `settings: Arc<dyn SettingsStore>` — per-org agent settings (model / system
   prompt / default tools), read/written by `/admin/settings`.
-- a **document-set registry** (set name → doc count) — the in-memory knowledge
-  backend drops document metadata on ingest, so `/admin/document-sets` reads set
-  names + counts from this side registry, populated as docs are seeded/ingested.
+- an **org-scoped document-set registry** (`org_id → (set name → doc count)`) —
+  the in-memory knowledge backend drops document metadata on ingest, so
+  `/admin/document-sets` reads set names + counts from this side registry,
+  populated as docs are seeded/ingested. Keyed by org (cross-org scoping).
+- an **org-scoped connector registry** (`org_id → [connector names]`) backing
+  `/admin/indexing/runs`; runs are keyed by `scoped_connector_key(org, name)` so
+  same-named connectors in different orgs don't collide.
 
 ### Admin-store persistence (now durable)
 

@@ -30,6 +30,7 @@ use tokio::runtime::Handle;
 
 use smooth_operator_core::{Document, KnowledgeBase, KnowledgeResult};
 
+use smooth_operator::access_control::{AccessContext, DocAcl};
 use smooth_operator::embedding::{Embedder, InputType};
 
 /// RRF constant. 60 is the canonical value from the original RRF paper; it
@@ -44,6 +45,13 @@ pub struct PgKnowledgeBase {
     handle: Handle,
     /// Optional org scoping. When set, ingest stamps and query filters on it.
     organization_id: Option<String>,
+    /// Optional document-level access control (feature gap G3). When set, every
+    /// query filters rows by this requester's entitlements against the stored
+    /// `acl` column **in SQL** (so a restricted document is never even fetched).
+    /// `None` ⇒ no within-org ACL filtering (org isolation only) — the handle
+    /// returned by [`StorageAdapter::knowledge`]. The chat path uses
+    /// [`StorageAdapter::knowledge_for_access`], which sets this.
+    access: Option<AccessContext>,
 }
 
 impl PgKnowledgeBase {
@@ -58,6 +66,20 @@ impl PgKnowledgeBase {
             embedder,
             handle,
             organization_id,
+            access: None,
+        }
+    }
+
+    /// A clone of this knowledge base whose queries enforce the given
+    /// [`AccessContext`]'s document-level entitlements (in SQL, against the
+    /// stored `acl` column). Used by
+    /// [`PostgresAdapter::knowledge_for_access`](crate::PostgresAdapter) on the
+    /// chat retrieval path.
+    #[must_use]
+    pub fn with_access(&self, access: AccessContext) -> Self {
+        Self {
+            access: Some(access),
+            ..self.clone()
         }
     }
 
@@ -86,6 +108,13 @@ impl PgKnowledgeBase {
             .ok_or_else(|| anyhow!("embedder returned no vector"))?;
         let literal = Self::vector_literal(&embedding);
         let metadata = serde_json::to_value(&doc.metadata)?;
+        // Persist the document's ACL (feature gap G3) as a discrete column so it
+        // survives the ingest→serve process boundary and can be filtered in SQL
+        // at read. Parsed from the same `acl_v2` metadata key the in-memory
+        // store records. `None` ⇒ NULL ⇒ org-public (backward-compatible).
+        let acl: Option<serde_json::Value> = DocAcl::from_metadata(&doc.metadata)
+            .map(|a| serde_json::to_value(&a))
+            .transpose()?;
         // Stable per-chunk id: the document is stored as a single chunk keyed by
         // its document id, so re-ingesting the same doc upserts in place.
         let row_id = doc.id.clone();
@@ -94,15 +123,16 @@ impl PgKnowledgeBase {
         client
             .execute(
                 "INSERT INTO knowledge_vectors
-                    (id, document_id, organization_id, source, content, embedding, metadata)
-                 VALUES ($1, $2, $3, $4, $5, $6::text::vector, $7)
+                    (id, document_id, organization_id, source, content, embedding, metadata, acl)
+                 VALUES ($1, $2, $3, $4, $5, $6::text::vector, $7, $8)
                  ON CONFLICT (id) DO UPDATE SET
                     document_id     = EXCLUDED.document_id,
                     organization_id = EXCLUDED.organization_id,
                     source          = EXCLUDED.source,
                     content         = EXCLUDED.content,
                     embedding       = EXCLUDED.embedding,
-                    metadata        = EXCLUDED.metadata",
+                    metadata        = EXCLUDED.metadata,
+                    acl             = EXCLUDED.acl",
                 &[
                     &row_id,
                     &doc.id,
@@ -111,6 +141,7 @@ impl PgKnowledgeBase {
                     &doc.content,
                     &literal,
                     &metadata,
+                    &acl,
                 ],
             )
             .await?;
@@ -133,30 +164,78 @@ impl PgKnowledgeBase {
         let candidate_n: i64 = i64::try_from((limit * 4).max(20)).unwrap_or(20);
         let client = self.pool.get().await?;
 
+        // --- ACL filter (feature gap G3) ---
+        //
+        // When this handle is access-bound, every row must pass the requester's
+        // document-level entitlement **in SQL** — a restricted document is never
+        // even fetched. A row is visible when ANY holds:
+        //   - `acl IS NULL`              → no ACL recorded ⇒ org-public default
+        //   - `acl->>'public'` is true   → explicitly public
+        //   - requester user id ∈ acl.users   (jsonb `?` key-exists)
+        //   - any requester group ∈ acl.groups (jsonb `?|` any-key-exists)
+        // `$4` is the requester user id (text, NULL ⇒ anonymous), `$5` the
+        // requester groups (text[]). Both are bound below. When the handle is
+        // NOT access-bound (`access` is None) the predicate is `TRUE` — org
+        // isolation only, no within-org filtering.
+        // Build the ACL predicate + the extra bound params ONLY when this handle
+        // is access-bound. Postgres rejects a prepared statement that binds a
+        // parameter the SQL never references, so the raw (org-isolation-only)
+        // path must not add `$4`/`$5`.
+        let acl_user: Option<String> = self.access.as_ref().and_then(|c| c.user_id.clone());
+        let acl_groups: Vec<String> = self
+            .access
+            .as_ref()
+            .map(|c| c.groups.clone())
+            .unwrap_or_default();
+        let acl_predicate = if self.access.is_some() {
+            // A row is visible when it has no recorded ACL (org-public), is
+            // explicitly public, names the requester's user id, or names any of
+            // the requester's groups. `?` / `?|` are jsonb key-exists operators.
+            "(acl IS NULL \
+              OR (acl->>'public')::boolean IS TRUE \
+              OR ($4::text IS NOT NULL AND acl->'users' ? $4) \
+              OR (acl->'groups' ?| $5::text[]))"
+        } else {
+            "TRUE"
+        };
+        // The query text as an owned param so the borrowed trait objects below
+        // don't tie the param vec to the input `&str` lifetime.
+        let query_owned = query.to_string();
+
         // --- dense arm: cosine distance via pgvector `<=>` ---
-        let dense_rows = client
-            .query(
-                "SELECT id, document_id, source, content
-                 FROM knowledge_vectors
-                 WHERE ($1::text IS NULL OR organization_id = $1)
-                 ORDER BY embedding <=> $2::text::vector
-                 LIMIT $3",
-                &[&self.organization_id, &literal, &candidate_n],
-            )
-            .await?;
+        let dense_sql = format!(
+            "SELECT id, document_id, source, content
+             FROM knowledge_vectors
+             WHERE ($1::text IS NULL OR organization_id = $1)
+               AND {acl_predicate}
+             ORDER BY embedding <=> $2::text::vector
+             LIMIT $3"
+        );
+        let mut dense_params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
+            vec![&self.organization_id, &literal, &candidate_n];
+        if self.access.is_some() {
+            dense_params.push(&acl_user);
+            dense_params.push(&acl_groups);
+        }
+        let dense_rows = client.query(&dense_sql, &dense_params).await?;
 
         // --- sparse arm: tsvector BM25-style match, ranked by ts_rank ---
-        let sparse_rows = client
-            .query(
-                "SELECT id, document_id, source, content
-                 FROM knowledge_vectors
-                 WHERE ($1::text IS NULL OR organization_id = $1)
-                   AND content_tsv @@ plainto_tsquery('english', $2)
-                 ORDER BY ts_rank(content_tsv, plainto_tsquery('english', $2)) DESC
-                 LIMIT $3",
-                &[&self.organization_id, &query, &candidate_n],
-            )
-            .await?;
+        let sparse_sql = format!(
+            "SELECT id, document_id, source, content
+             FROM knowledge_vectors
+             WHERE ($1::text IS NULL OR organization_id = $1)
+               AND content_tsv @@ plainto_tsquery('english', $2)
+               AND {acl_predicate}
+             ORDER BY ts_rank(content_tsv, plainto_tsquery('english', $2)) DESC
+             LIMIT $3"
+        );
+        let mut sparse_params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
+            vec![&self.organization_id, &query_owned, &candidate_n];
+        if self.access.is_some() {
+            sparse_params.push(&acl_user);
+            sparse_params.push(&acl_groups);
+        }
+        let sparse_rows = client.query(&sparse_sql, &sparse_params).await?;
 
         // --- Reciprocal Rank Fusion ---
         struct Hit {

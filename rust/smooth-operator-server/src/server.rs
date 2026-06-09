@@ -18,11 +18,13 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::response::Response;
 use axum::routing::get;
 use axum::Router;
+
 use futures_util::{SinkExt, StreamExt};
+use smooth_operator::access_control::AccessContext;
 use tokio::net::TcpListener;
 
 use smooth_operator_adapter_memory::InMemoryStorageAdapter;
@@ -46,6 +48,12 @@ pub fn router(state: AppState) -> Router {
 /// `GET /admin/document-sets` has something to report in a seeded server.
 const SEED_DOCUMENT_SET: &str = "policies";
 
+/// The org the seeded demo docs + their document-set registry entries belong to.
+/// Mirrors the org `handler::handle_create_session` stamps onto reference
+/// conversations, so the seeded sets show up for the reference org's admin
+/// caller (and ONLY that org — cross-org scoping).
+pub const SEED_ORG_ID: &str = "reference-org";
+
 /// Build an [`AppState`] over a fresh in-memory adapter, seeding the knowledge
 /// base when `config.seed_kb` is set. Exposed for tests + the binary.
 ///
@@ -63,8 +71,8 @@ pub fn build_state(config: ServerConfig) -> AppState {
         // Record the seeded docs' document-set membership for the admin API
         // (the in-memory backend drops document metadata, so the registry is the
         // source of truth for set names + counts).
-        state.record_document_set(SEED_DOCUMENT_SET);
-        state.record_document_set(SEED_DOCUMENT_SET);
+        state.record_document_set(SEED_ORG_ID, SEED_DOCUMENT_SET);
+        state.record_document_set(SEED_ORG_ID, SEED_DOCUMENT_SET);
     }
     state
 }
@@ -255,14 +263,70 @@ pub async fn run(config: ServerConfig) -> Result<()> {
     Ok(())
 }
 
-/// Axum handler: upgrade an HTTP request on `/ws` to a WebSocket.
-async fn ws_upgrade(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
-    ws.on_upgrade(move |socket| connection_loop(socket, state))
+/// Query parameters accepted on the `/ws` upgrade. `token` carries the bearer
+/// JWT used to authenticate the connection (browsers can't set custom headers on
+/// a WebSocket handshake, so the token rides on the query string — the standard
+/// pattern for WS auth).
+#[derive(Debug, serde::Deserialize, Default)]
+struct WsQuery {
+    /// The bearer token (raw JWT, no `Bearer ` prefix), if provided.
+    #[serde(default)]
+    token: Option<String>,
+}
+
+/// Resolve the connection's [`AccessContext`] from the `?token=` query param.
+///
+/// **Fail closed for ACL'd content**: when no token is presented, or the auth
+/// verifier is the no-key [`AdminDisabledVerifier`] (admin/auth unconfigured —
+/// dev/no-auth), or the token fails to verify, the connection runs as
+/// [`AccessContext::anonymous`] — which sees **only org-public** knowledge, not
+/// every document. A valid token yields the principal's full
+/// [`AccessContext`](smooth_operator::auth::Principal::access_context) (user id +
+/// groups), so it can read documents scoped to it. Verification failures are
+/// logged (never the token) and degrade to anonymous rather than dropping the
+/// connection, so the dev/no-auth case still serves org-public knowledge.
+fn resolve_ws_access(state: &AppState, query: &WsQuery) -> AccessContext {
+    let Some(token) = query
+        .token
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+    else {
+        // No token → anonymous (org-public only). Keeps the dev/no-auth `/ws`
+        // path working while failing closed for ACL'd content.
+        return AccessContext::anonymous();
+    };
+    match state.auth.verify(token) {
+        Ok(principal) => principal.access_context(),
+        Err(e) => {
+            // Don't leak the token; log only the mode + a generic reason.
+            tracing::warn!(
+                auth_mode = state.auth.mode(),
+                error = %e,
+                "ws token failed verification; serving org-public knowledge only (anonymous)"
+            );
+            AccessContext::anonymous()
+        }
+    }
+}
+
+/// Axum handler: upgrade an HTTP request on `/ws` to a WebSocket. The bearer
+/// token (if any) is taken from the `?token=` query param, resolved to an
+/// [`AccessContext`] at connect time, and threaded into every turn so retrieval
+/// is access-controlled per connection.
+async fn ws_upgrade(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+    Query(query): Query<WsQuery>,
+) -> Response {
+    let access = resolve_ws_access(&state, &query);
+    ws.on_upgrade(move |socket| connection_loop(socket, state, access))
 }
 
 /// Drive one WebSocket connection: split into reader + writer, joined by an
-/// outbound event sink.
-async fn connection_loop(socket: WebSocket, state: AppState) {
+/// outbound event sink. `access` is the connection's resolved document-level
+/// entitlement, threaded into every `send_message` turn.
+async fn connection_loop(socket: WebSocket, state: AppState, access: AccessContext) {
     let (mut ws_tx, mut ws_rx) = socket.split();
     let (sink_tx, mut sink_rx) = tokio::sync::mpsc::unbounded_channel::<serde_json::Value>();
 
@@ -283,7 +347,7 @@ async fn connection_loop(socket: WebSocket, state: AppState) {
     while let Some(frame) = ws_rx.next().await {
         match frame {
             Ok(Message::Text(text)) => {
-                handler::handle_frame(&state, text.as_str(), &sink_tx).await;
+                handler::handle_frame(&state, &access, text.as_str(), &sink_tx).await;
             }
             Ok(Message::Binary(_)) => {
                 let _ = sink_tx.send(crate::protocol::error(

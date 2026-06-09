@@ -13,6 +13,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::Utc;
 
+use smooth_operator::access_control::{AccessContext, AclKnowledgeStore};
 use smooth_operator::adapter::{
     ConversationUpdate, MessagePage, MessageQuery, SessionUpdate, StorageAdapter,
 };
@@ -36,7 +37,14 @@ struct Tables {
 pub struct InMemoryStorageAdapter {
     tables: RwLock<Tables>,
     checkpoints: Arc<MemoryCheckpointStore>,
-    knowledge: Arc<InMemoryKnowledge>,
+    /// Knowledge is wrapped in a shared [`AclKnowledgeStore`] so that documents
+    /// ingested through this adapter (seeding, the `/index` path) record their
+    /// [`DocAcl`](smooth_operator::access_control::DocAcl) into the store's side
+    /// table — and a per-request reader (built by
+    /// [`knowledge_for_access`](StorageAdapter::knowledge_for_access)) enforces
+    /// it. `knowledge()` returns the **ingest handle** (records ACLs as docs are
+    /// seeded), so the side table is populated within this single process.
+    knowledge: AclKnowledgeStore,
 }
 
 impl InMemoryStorageAdapter {
@@ -44,7 +52,7 @@ impl InMemoryStorageAdapter {
         Self {
             tables: RwLock::new(Tables::default()),
             checkpoints: Arc::new(MemoryCheckpointStore::new()),
-            knowledge: Arc::new(InMemoryKnowledge::new()),
+            knowledge: AclKnowledgeStore::new(Arc::new(InMemoryKnowledge::new())),
         }
     }
 }
@@ -321,6 +329,19 @@ impl StorageAdapter for InMemoryStorageAdapter {
     }
 
     fn knowledge(&self) -> Arc<dyn KnowledgeBase> {
-        self.knowledge.clone()
+        // The ingest handle: forwards documents to the inner store and records
+        // each document's ACL into the shared side table, so a later
+        // access-bound reader can enforce it. Reads through this handle are
+        // unfiltered (org-public), which is the org-isolation-only contract of
+        // `knowledge()`.
+        self.knowledge.ingest_handle()
+    }
+
+    fn knowledge_for_access(&self, access: &AccessContext) -> Arc<dyn KnowledgeBase> {
+        // An ACL-filtering reader bound to the requester: over-fetches from the
+        // inner store and drops every document the requester is not entitled to
+        // before truncating. The side table was populated at ingest (above), so
+        // this enforces real within-org document-level access control.
+        self.knowledge.reader(access.clone())
     }
 }

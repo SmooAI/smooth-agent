@@ -53,7 +53,7 @@ use smooth_operator_ingestion::{
 
 use crate::embedder::{build_embedder, EmbedderConfig};
 use crate::protocol;
-use crate::state::AppState;
+use crate::state::{scoped_connector_key, AppState};
 
 /// Build the `/admin` router over the shared [`AppState`].
 pub fn router() -> Router<AppState> {
@@ -350,18 +350,26 @@ async fn conversation_messages(
     })))
 }
 
-/// `GET /admin/indexing/runs` — indexing-run status across the org's connectors.
-/// Curator+ only.
+/// `GET /admin/indexing/runs` — indexing-run status across **the caller's org's**
+/// connectors. Curator+ only.
+///
+/// Org-scoped two ways (cross-org leak fix): we iterate only the principal's
+/// org's connectors, and we query the indexing store under the **org-namespaced**
+/// key ([`scoped_connector_key`]) so a same-named connector in another org can't
+/// surface its runs here. The reported `connectorName` is the un-scoped display
+/// name (the namespace is an internal storage key, never exposed).
 async fn indexing_runs(
-    RequireRole::<1>(_principal): RequireRole<1>,
+    RequireRole::<1>(principal): RequireRole<1>,
     State(state): State<AppState>,
 ) -> Json<Value> {
     let mut runs = Vec::new();
-    for connector in state.connectors() {
-        for run in state.indexing.list_runs(&connector) {
+    for connector in state.connectors(&principal.org_id) {
+        let key = scoped_connector_key(&principal.org_id, &connector);
+        for run in state.indexing.list_runs(&key) {
             runs.push(serde_json::json!({
                 "id": run.id,
-                "connectorName": run.connector_name,
+                // Report the display name, never the internal org-namespaced key.
+                "connectorName": connector,
                 "status": format!("{:?}", run.status).to_lowercase(),
                 "startedAt": run.started_at,
                 "finishedAt": run.finished_at,
@@ -384,14 +392,15 @@ struct DocumentSetRow {
     document_count: usize,
 }
 
-/// `GET /admin/document-sets` — distinct document-set names + doc counts.
-/// Curator+ only.
+/// `GET /admin/document-sets` — distinct document-set names + doc counts for
+/// **the caller's org**. Curator+ only. Org-scoped so org A's document sets are
+/// never reported to an org-B caller (cross-org leak fix).
 async fn document_sets(
-    RequireRole::<1>(_principal): RequireRole<1>,
+    RequireRole::<1>(principal): RequireRole<1>,
     State(state): State<AppState>,
 ) -> Json<Value> {
     let sets: Vec<DocumentSetRow> = state
-        .document_sets()
+        .document_sets(&principal.org_id)
         .into_iter()
         .map(|(name, document_count)| DocumentSetRow {
             name,
@@ -523,8 +532,9 @@ async fn create_connector(
         updated_at: now,
     };
     state.connector_configs.upsert(cfg.clone());
-    // Record the connector name so its runs are listed by /admin/indexing/runs.
-    state.record_connector(cfg.name.clone());
+    // Record the connector name under the caller's org so its runs are listed by
+    // /admin/indexing/runs — and ONLY for this org (cross-org scoping).
+    state.record_connector(principal.org_id.clone(), cfg.name.clone());
     Ok((StatusCode::CREATED, Json(connector_json(&cfg))).into_response())
 }
 
@@ -556,7 +566,7 @@ async fn update_connector(
         updated_at: chrono::Utc::now(),
     };
     state.connector_configs.upsert(cfg.clone());
-    state.record_connector(cfg.name.clone());
+    state.record_connector(principal.org_id.clone(), cfg.name.clone());
     Ok(Json(connector_json(&cfg)))
 }
 
@@ -594,7 +604,13 @@ async fn index_connector(
 
     // Build the live connector from the stored config (resolving any secret from
     // env at this moment). A validation failure here is a clean 400.
-    let connector = build_connector(&cfg)?;
+    //
+    // The connector is named with an ORG-NAMESPACED key so the indexing run is
+    // recorded in the store under `IXCONN#<org>...<name>` — a same-named
+    // connector in another org records + lists separately (cross-org scoping).
+    // The display name (`cfg.name`) is rewritten back into the response below.
+    let scoped_key = scoped_connector_key(&principal.org_id, &cfg.name);
+    let connector = build_connector(&cfg, &scoped_key)?;
 
     let service = IndexingService::new(principal.org_id.clone());
     let chunker = Chunker::default();
@@ -617,13 +633,14 @@ async fn index_connector(
         .await
         .map_err(|e| AdminError::internal(format!("indexing failed: {e}")))?;
 
-    // Surface the connector for /admin/indexing/runs listing.
-    state.record_connector(cfg.name.clone());
+    // Surface the connector for /admin/indexing/runs listing (org-scoped).
+    state.record_connector(principal.org_id.clone(), cfg.name.clone());
 
     Ok(Json(serde_json::json!({
         "run": {
             "id": run.id,
-            "connectorName": run.connector_name,
+            // Report the display name, never the internal org-namespaced key.
+            "connectorName": cfg.name,
             "status": format!("{:?}", run.status).to_lowercase(),
             "startedAt": run.started_at,
             "finishedAt": run.finished_at,
@@ -639,11 +656,18 @@ async fn index_connector(
 /// Build a live [`Connector`] from a stored [`ConnectorConfig`], resolving any
 /// secret named by `auth_ref` from the environment *now* (never persisted).
 ///
+/// `connector_name` is the name stamped onto the built connector — the caller
+/// passes an **org-namespaced** key so the indexing run is recorded per-org
+/// (cross-org scoping), keeping the human display name out of the storage key.
+///
 /// Returns a clean 400 ([`AdminError::validation`]) — never a panic — for a
 /// malformed config or an unresolvable `auth_ref`, so `/index` can surface the
 /// problem without touching the network.
-fn build_connector(cfg: &ConnectorConfig) -> Result<Box<dyn Connector>, AdminError> {
-    let connector_name = cfg.name.clone();
+fn build_connector(
+    cfg: &ConnectorConfig,
+    connector_name: &str,
+) -> Result<Box<dyn Connector>, AdminError> {
+    let connector_name = connector_name.to_string();
     match cfg.kind {
         ConnectorKind::Web => {
             let url = cfg

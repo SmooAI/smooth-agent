@@ -494,7 +494,7 @@ mod tests {
         let mut body = "€".repeat(200);
         body.push_str("<html>");
         let _ = looks_like_html(&body); // must not panic
-        // A real HTML marker within the first 512 bytes is still detected.
+                                        // A real HTML marker within the first 512 bytes is still detected.
         assert!(looks_like_html("<!doctype html><html><body>hi"));
         assert!(!looks_like_html("just some plain text, no markup here"));
     }
