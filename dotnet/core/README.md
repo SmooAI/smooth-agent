@@ -15,7 +15,7 @@ idioms, so it slots into the .NET AI ecosystem natively:
 
 Behavioral parity with the Rust reference is enforced by the **shared conformance
 fixtures + eval scenarios**, not by identical type shapes — see
-[`docs/Architecture/Polyglot Cores.md`](../../docs/Architecture/Polyglot%20Cores.md).
+[Polyglot Cores](https://github.com/SmooAI/smooth-operator/blob/main/docs/Architecture/Polyglot%20Cores.md).
 
 ## Status
 
