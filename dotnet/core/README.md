@@ -35,8 +35,11 @@ fixtures + eval scenarios**, not by identical type shapes — see
 - **Phase 6 — cost + budgets** (shipped): `CostTracker` (token + USD via `ModelPricing`) and
   `CostBudget` that halts a run at a spend/token ceiling (`AgentRunResponse.Cost` /
   `.BudgetExceeded`).
+- **Phase 7 — evals** (shipped): the five shared scenarios run against the live gateway + an
+  LLM judge (aggregate mean ≥ 4.0), gated on `SMOOTH_AGENT_E2E=1` + `SMOOAI_GATEWAY_KEY`.
 
-30 parity tests green. See the phased roadmap in the Polyglot Cores doc.
+**All phases shipped** — 31 parity tests + 1 gated live-eval suite. See the phased roadmap in
+the Polyglot Cores doc.
 
 ```csharp
 // Multi-turn: pass a thread to each run and it remembers.

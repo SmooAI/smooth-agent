@@ -1,6 +1,6 @@
 # Polyglot Cores
 
-> **Status:** active (C# is the first sibling core, in progress).
+> **Status:** active. The **C# core is complete** (all phases shipped, published to NuGet).
 > The Rust engine `smooai-smooth-operator-core` is the **reference implementation**.
 
 ## The idea
@@ -109,9 +109,18 @@ ships green parity tests before the next starts.
   mid-run — the loop halts gracefully and `AgentRunResponse.BudgetExceeded` is set. Parity
   tests: pricing math, tracker accumulation, cost tracking with pricing, token + USD budget
   halts.
-- **Phase 7 — evals**: run the five shared eval scenarios against a live model, ≥ 4.0.
-- **Phase 8 — packaging**: publish `SmooAI.SmoothOperator.Core` to NuGet (mirror the
-  npm/crates publish workflows).
+- **Phase 7 — evals** *(shipped)*: the five shared scenarios (`grounded_answer`,
+  `honest_no_knowledge`, `tool_use_supported_answer`, `multi_turn_coherence`,
+  `tone_helpfulness`) ported as a gated `SkippableFact` — runs the C# agent over the live
+  gateway (`llm.smoo.ai`, an OpenAI-compatible `IChatClient`) + an LLM judge, asserting an
+  aggregate mean ≥ 4.0. Gated on `SMOOTH_AGENT_E2E=1` + `SMOOAI_GATEWAY_KEY`, skips cleanly
+  otherwise (the judge JSON parser is unit-tested ungated).
+- **Phase 8 — packaging** *(shipped)*: `SmooAI.SmoothOperator.Core` published to NuGet;
+  releases are Changesets-driven in lockstep with the other artifacts (see below).
+
+> **All phases shipped.** The C# core is the first complete sibling of the Rust reference —
+> 31 unit/parity tests + 1 gated live-eval suite. Next sibling (Python/TS) follows the same
+> contract.
 
 ## Adding the Nth language core
 

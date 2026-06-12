@@ -18,6 +18,10 @@
     <!-- Microsoft.Extensions.AI (not just Abstractions) for AIFunctionFactory.Create —
          authoring tools from ordinary C# methods, exactly as a MAF/SK dev does. -->
     <PackageReference Include="Microsoft.Extensions.AI" Version="9.7.1" />
+    <!-- Live eval harness (gated): an OpenAI-compatible IChatClient against the gateway,
+         plus SkippableFact so the suite skips cleanly without SMOOTH_AGENT_E2E + key. -->
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="9.7.1-preview.1.25365.4" />
+    <PackageReference Include="Xunit.SkippableFact" Version="1.5.61" />
   </ItemGroup>
 
   <ItemGroup>
