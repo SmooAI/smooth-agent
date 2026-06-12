@@ -1,0 +1,111 @@
+# Changesets-driven release for ALL published smooth-operator artifacts, in lockstep.
+#
+# Flow (the @smooai/config model):
+#   1. PRs land with a `.changeset/*.md` describing the bump.
+#   2. This workflow opens/updates a "🦋 New version release" PR that runs
+#      `version:bump` = `changeset version` (bumps @smooai/smooth-operator) +
+#      `version:sync` (stamps the SAME version onto the .NET csproj — see
+#      scripts/sync-versions.mjs).
+#   3. Merging that PR re-runs this workflow, which publishes npm (changeset
+#      publish) and then NuGet — every artifact at the one shared version.
+#
+# The standalone publish-npm.yml / publish-nuget.yml remain as manual fallbacks.
+# Secrets: GH_PAT, SMOOAI_NPM_TOKEN, SMOOAI_NUGET_API_KEY (all org-wide).
+name: Release (Changesets 🦋)
+
+on:
+    workflow_dispatch:
+    push:
+        branches:
+            - main
+
+env:
+    CI: true
+    FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+concurrency:
+    group: release
+    cancel-in-progress: false
+
+jobs:
+    release:
+        timeout-minutes: 30
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            pull-requests: write
+            id-token: write
+            actions: write
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  token: ${{ secrets.GH_PAT }}
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: 'pnpm'
+
+            - name: Setup .NET
+              uses: actions/setup-dotnet@v4
+              with:
+                  dotnet-version: '8.0.x'
+
+            - name: Install dependencies
+              run: pnpm install
+
+            - name: Build + test npm package
+              run: |
+                  pnpm --filter @smooai/smooth-operator build
+                  pnpm --filter @smooai/smooth-operator test
+
+            - name: .NET restore + build + test
+              run: |
+                  dotnet restore dotnet/SmooAI.SmoothOperator.slnx
+                  dotnet build dotnet/SmooAI.SmoothOperator.slnx -c Release --no-restore
+                  dotnet test dotnet/SmooAI.SmoothOperator.slnx -c Release --no-build --verbosity normal
+
+            - name: Version + publish npm (Changesets 🦋)
+              id: changesets
+              uses: changesets/action@v1
+              with:
+                  commit: '🦋 New version release'
+                  title: '🦋 New version release'
+                  version: pnpm run version:bump
+                  publish: pnpm ci:publish
+                  createGithubReleases: true
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+                  NPM_TOKEN: ${{ secrets.SMOOAI_NPM_TOKEN }}
+
+            - name: Publish SmooAI.SmoothOperator.Core to NuGet
+              if: steps.changesets.outputs.published == 'true'
+              env:
+                  NUGET_API_KEY: ${{ secrets.SMOOAI_NUGET_API_KEY }}
+              run: |
+                  if [ -z "${NUGET_API_KEY}" ]; then
+                      echo "::error::SMOOAI_NUGET_API_KEY secret is not set"
+                      exit 1
+                  fi
+                  dotnet pack dotnet/core/src/SmooAI.SmoothOperator.Core.csproj -c Release --no-build -o dist
+                  dotnet nuget push "dist/*.nupkg" \
+                      --api-key "${NUGET_API_KEY}" \
+                      --source https://api.nuget.org/v3/index.json \
+                      --skip-duplicate
+
+            - name: Auto-merge the Changeset PR
+              run: |
+                  PR_NUMBER=$(gh pr list --state open --head changeset-release/main --json number --jq '.[0].number')
+                  if [[ -n "$PR_NUMBER" && "$PR_NUMBER" != "null" ]]; then
+                      echo "Auto-merging Changeset PR #$PR_NUMBER"
+                      gh pr merge "$PR_NUMBER" --auto --squash
+                  else
+                      echo "No open Changeset PR to merge."
+                  fi
+              env:
+                  GH_TOKEN: ${{ secrets.GH_PAT }}
