@@ -29,8 +29,11 @@ fixtures + eval scenarios**, not by identical type shapes — see
   snapshot a run and `ResumeThreadAsync` to rebuild a thread after a crash.
 - **Phase 4 — HITL** (shipped): `IHumanGate` pauses for human approval before sensitive/write
   tools (`RequiresApproval`); a denial is fed back to the model and the tool never runs.
+- **Phase 5 — cast / subagents** (shipped): a lead delegates to clearance-scoped sidekicks via
+  the `send_sidekick` tool (`Cast` / `OperatorRole` / `Clearance` / `SubagentDispatcher`);
+  isolated transcripts, only the summary returns.
 
-21 parity tests green. See the phased roadmap in the Polyglot Cores doc.
+25 parity tests green. See the phased roadmap in the Polyglot Cores doc.
 
 ```csharp
 // Multi-turn: pass a thread to each run and it remembers.

@@ -99,8 +99,11 @@ ships green parity tests before the next starts.
   the pause point (a UI awaits a real person); a denial is fed back to the model and the
   tool never runs. Parity tests: deny blocks execution, approve runs + gate saw the args,
   non-flagged tools skip the gate.
-- **Phase 5 — cast / subagents**: `OperatorRole` clearance, dispatch-subagent tool,
-  isolated sidekick transcripts.
+- **Phase 5 — cast / subagents** *(shipped)*: `Cast` of `OperatorRole`s with `Clearance`
+  (allow/deny/deny-all); a `SubagentDispatcher` exposes a `send_sidekick` tool so a lead
+  delegates a sub-task to a clearance-scoped sidekick that runs as its own agent — only its
+  summary returns, transcript isolated. Maps to MAF's handoff pattern. Parity tests:
+  clearance rules, cast registry, dispatch + isolation, denied tool unreachable by sidekick.
 - **Phase 6 — cost + budgets**: `CostTracker`, `CostBudget` enforcement, model pricing.
 - **Phase 7 — evals**: run the five shared eval scenarios against a live model, ≥ 4.0.
 - **Phase 8 — packaging**: publish `SmooAI.SmoothOperator.Core` to NuGet (mirror the
