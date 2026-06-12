@@ -32,8 +32,11 @@ fixtures + eval scenarios**, not by identical type shapes — see
 - **Phase 5 — cast / subagents** (shipped): a lead delegates to clearance-scoped sidekicks via
   the `send_sidekick` tool (`Cast` / `OperatorRole` / `Clearance` / `SubagentDispatcher`);
   isolated transcripts, only the summary returns.
+- **Phase 6 — cost + budgets** (shipped): `CostTracker` (token + USD via `ModelPricing`) and
+  `CostBudget` that halts a run at a spend/token ceiling (`AgentRunResponse.Cost` /
+  `.BudgetExceeded`).
 
-25 parity tests green. See the phased roadmap in the Polyglot Cores doc.
+30 parity tests green. See the phased roadmap in the Polyglot Cores doc.
 
 ```csharp
 // Multi-turn: pass a thread to each run and it remembers.

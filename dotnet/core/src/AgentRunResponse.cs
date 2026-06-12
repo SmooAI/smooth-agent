@@ -10,11 +10,13 @@ namespace SmooAI.SmoothOperator.Core;
 /// </summary>
 public sealed class AgentRunResponse
 {
-    public AgentRunResponse(IReadOnlyList<ChatMessage> messages, UsageDetails usage, int iterations)
+    public AgentRunResponse(IReadOnlyList<ChatMessage> messages, UsageDetails usage, int iterations, CostTracker cost, BudgetExceeded? budgetExceeded = null)
     {
         Messages = messages;
         Usage = usage;
         Iterations = iterations;
+        Cost = cost;
+        BudgetExceeded = budgetExceeded;
     }
 
     /// <summary>Every message produced during the turn, in order.</summary>
@@ -25,6 +27,12 @@ public sealed class AgentRunResponse
 
     /// <summary>Number of LLM calls (loop iterations) the turn took.</summary>
     public int Iterations { get; }
+
+    /// <summary>Token + USD accounting for the turn.</summary>
+    public CostTracker Cost { get; }
+
+    /// <summary>Set when the turn stopped early because it hit <see cref="AgentOptions.Budget"/>.</summary>
+    public BudgetExceeded? BudgetExceeded { get; }
 
     /// <summary>The final assistant text — the answer the user sees.</summary>
     public string Text =>

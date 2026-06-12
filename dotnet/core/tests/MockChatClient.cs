@@ -20,10 +20,13 @@ internal sealed class MockChatClient : IChatClient
 
     private static UsageDetails Tokens() => new() { InputTokenCount = 10, OutputTokenCount = 5, TotalTokenCount = 15 };
 
+    /// <summary>The model id stamped on every scripted response (for pricing/cost tests).</summary>
+    public const string ModelId = "mock-model";
+
     /// <summary>Script a plain assistant text response (ends the loop).</summary>
     public MockChatClient PushText(string text)
     {
-        _responses.Enqueue(new ChatResponse(new ChatMessage(ChatRole.Assistant, text)) { Usage = Tokens() });
+        _responses.Enqueue(new ChatResponse(new ChatMessage(ChatRole.Assistant, text)) { Usage = Tokens(), ModelId = ModelId });
         return this;
     }
 
@@ -31,7 +34,7 @@ internal sealed class MockChatClient : IChatClient
     public MockChatClient PushToolCall(string callId, string name, IDictionary<string, object?> arguments)
     {
         var message = new ChatMessage(ChatRole.Assistant, new List<AIContent> { new FunctionCallContent(callId, name, arguments) });
-        _responses.Enqueue(new ChatResponse(message) { Usage = Tokens() });
+        _responses.Enqueue(new ChatResponse(message) { Usage = Tokens(), ModelId = ModelId });
         return this;
     }
 

@@ -52,6 +52,8 @@ public sealed class SmoothAgent
         var newThisTurn = new List<ChatMessage> { working[^1] }; // the live user message
         var chatOptions = BuildChatOptions();
         var usage = new UsageDetails();
+        var cost = new CostTracker();
+        BudgetExceeded? budgetHit = null;
         var iterations = 0;
 
         while (true)
@@ -61,9 +63,16 @@ public sealed class SmoothAgent
 
             var response = await _chatClient.GetResponseAsync(working, chatOptions, cancellationToken).ConfigureAwait(false);
             Accumulate(usage, response.Usage);
+            cost.Record(response.ModelId, response.Usage, LookupPricing(response.ModelId));
             working.AddRange(response.Messages);
             newThisTurn.AddRange(response.Messages);
             await MaybeCheckpointAsync(thread, newThisTurn, iterations, CheckpointStrategy.AfterEachIteration, cancellationToken).ConfigureAwait(false);
+
+            // Stop before another expensive call if the run has blown its spend ceiling.
+            if (_options.Budget is not null && cost.ExceedsBudget(_options.Budget, out budgetHit))
+            {
+                break;
+            }
 
             var calls = ExtractToolCalls(response.Messages);
             if (calls.Count == 0 || iterations >= _options.MaxIterations)
@@ -78,8 +87,11 @@ public sealed class SmoothAgent
         }
 
         thread?.AddRange(newThisTurn);
-        return new AgentRunResponse(newThisTurn, usage, iterations);
+        return new AgentRunResponse(newThisTurn, usage, iterations, cost, budgetHit);
     }
+
+    private ModelPricing? LookupPricing(string? modelId) =>
+        modelId is not null && _options.Pricing.TryGetValue(modelId, out var pricing) ? pricing : null;
 
     /// <summary>Stream a single stateless turn.</summary>
     public IAsyncEnumerable<ChatResponseUpdate> RunStreamingAsync(string message, CancellationToken cancellationToken = default) =>

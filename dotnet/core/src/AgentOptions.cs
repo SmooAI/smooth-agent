@@ -85,4 +85,17 @@ public sealed class AgentOptions
     /// Only consulted when <see cref="HumanGate"/> is set.
     /// </summary>
     public Func<FunctionCallContent, bool>? RequiresApproval { get; set; }
+
+    /// <summary>
+    /// Optional spend ceiling. When set, the run halts (gracefully, returning what it has) as soon
+    /// as accumulated cost/tokens exceed it. Mirrors the Rust engine's <c>budget</c>.
+    /// </summary>
+    public CostBudget? Budget { get; set; }
+
+    /// <summary>
+    /// Per-model USD pricing, keyed by model id (as reported on the response's <c>ModelId</c>),
+    /// used to compute the dollar cost in <see cref="AgentRunResponse.Cost"/>. Token accounting
+    /// works without it; only USD requires pricing.
+    /// </summary>
+    public IDictionary<string, ModelPricing> Pricing { get; } = new Dictionary<string, ModelPricing>(StringComparer.Ordinal);
 }
