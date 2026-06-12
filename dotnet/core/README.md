@@ -27,8 +27,10 @@ fixtures + eval scenarios**, not by identical type shapes — see
   retrieved and injected as pre-turn grounding context (RAG).
 - **Phase 3 — checkpointing + resume** (shipped): `ICheckpointStore` + `CheckpointStrategy`;
   snapshot a run and `ResumeThreadAsync` to rebuild a thread after a crash.
+- **Phase 4 — HITL** (shipped): `IHumanGate` pauses for human approval before sensitive/write
+  tools (`RequiresApproval`); a denial is fed back to the model and the tool never runs.
 
-18 parity tests green. See the phased roadmap in the Polyglot Cores doc.
+21 parity tests green. See the phased roadmap in the Polyglot Cores doc.
 
 ```csharp
 // Multi-turn: pass a thread to each run and it remembers.

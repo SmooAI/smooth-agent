@@ -259,6 +259,18 @@ public sealed class SmoothAgent
             return new FunctionResultContent(call.CallId, $"Error: unknown tool '{call.Name}'");
         }
 
+        // Human-in-the-loop: pause for approval before running a flagged (write/sensitive) tool.
+        // A denial is fed back to the model as a result — the tool never runs.
+        if (_options.HumanGate is not null && (_options.RequiresApproval?.Invoke(call) ?? false))
+        {
+            var request = new HumanApprovalRequest(call.Name, call.Arguments, $"Approve calling tool '{call.Name}'?");
+            var decision = await _options.HumanGate.RequestApprovalAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!decision.IsApproved)
+            {
+                return new FunctionResultContent(call.CallId, $"Denied by human: {decision.Reason ?? "no reason given"}");
+            }
+        }
+
         try
         {
             var arguments = new AIFunctionArguments(call.Arguments);

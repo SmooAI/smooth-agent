@@ -94,7 +94,11 @@ ships green parity tests before the next starts.
   durable conversation during a run, and `ResumeThreadAsync` rebuilds a thread from its
   latest checkpoint (resume-or-new). `InMemoryCheckpointStore` ships; file/SQLite/Postgres
   next. Parity tests: store ops, checkpoint-after-tool-call, resume-across-restart.
-- **Phase 4 — HITL**: `IHumanGate` confirmation hook, pause on write tools, resume.
+- **Phase 4 — HITL** *(shipped)*: `IHumanGate` (+ `DelegateHumanGate`) the agent consults
+  before any tool call flagged by `AgentOptions.RequiresApproval`. The gate's async call is
+  the pause point (a UI awaits a real person); a denial is fed back to the model and the
+  tool never runs. Parity tests: deny blocks execution, approve runs + gate saw the args,
+  non-flagged tools skip the gate.
 - **Phase 5 — cast / subagents**: `OperatorRole` clearance, dispatch-subagent tool,
   isolated sidekick transcripts.
 - **Phase 6 — cost + budgets**: `CostTracker`, `CostBudget` enforcement, model pricing.

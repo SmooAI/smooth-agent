@@ -70,4 +70,19 @@ public sealed class AgentOptions
 
     /// <summary>When to write checkpoints during a run.</summary>
     public CheckpointStrategy Checkpoint { get; set; } = CheckpointStrategy.AfterToolCall;
+
+    /// <summary>
+    /// Optional human-in-the-loop gate. When set, the agent asks it for approval before running
+    /// any tool call for which <see cref="RequiresApproval"/> returns true. A denied call is not
+    /// executed; the model is told it was denied and can adapt. Mirrors the Rust engine's
+    /// confirmation hook.
+    /// </summary>
+    public IHumanGate? HumanGate { get; set; }
+
+    /// <summary>
+    /// Which tool calls need human approval (e.g. writes / destructive actions). Default: none.
+    /// Example: <c>o.RequiresApproval = call =&gt; call.Name is "delete_record" or "send_email";</c>
+    /// Only consulted when <see cref="HumanGate"/> is set.
+    /// </summary>
+    public Func<FunctionCallContent, bool>? RequiresApproval { get; set; }
 }
