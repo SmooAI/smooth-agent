@@ -3,7 +3,7 @@ using Microsoft.Extensions.AI;
 namespace SmooAI.SmoothOperator.Core;
 
 /// <summary>
-/// The terminal result of a <see cref="SmoothAgent.RunAsync"/> call: the full message
+/// The terminal result of a <c>SmoothAgent.RunAsync</c> call: the full message
 /// transcript of the turn (including any tool calls + results), accumulated token usage,
 /// and how many loop iterations it took. Analogous to the Rust engine returning the
 /// final <c>Conversation</c> plus its <c>CostTracker</c>.

@@ -76,12 +76,14 @@ checkpoints, cast, HITL, cost, memory/knowledge injection).
 Mirrors how the Rust core was bootstrapped (harness first, then layer up). Each phase
 ships green parity tests before the next starts.
 
-- **Phase 0 — harness + agentic loop** *(in progress)*: `IChatClient`-driven loop,
+- **Phase 0 — harness + agentic loop** *(shipped)*: `IChatClient`-driven loop,
   `AIFunction` tools, `MockChatClient`, `RunAsync`/`RunStreamingAsync`, max-iteration
   guard, usage accumulation. Parity test: text-turn ends after one call; tool-turn
   executes the function and feeds the result back.
-- **Phase 1 — conversation + compaction**: `ChatMessage` history, context-token budget,
-  compaction strategies.
+- **Phase 1 — conversation + compaction** *(shipped)*: `SmoothAgentThread` carries
+  history across turns; `MaxContextTokens` budget with a `SlidingWindow` compaction
+  strategy (preserves system + latest user). Parity tests: multi-turn continuity;
+  compaction trims old messages under budget.
 - **Phase 2 — memory + knowledge**: pluggable `IAgentMemory` / `IKnowledgeBase`,
   pre-turn context injection.
 - **Phase 3 — checkpointing + resume**: `ICheckpointStore` (in-memory → file → SQLite),

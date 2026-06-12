@@ -30,4 +30,14 @@ public sealed class AgentOptions
     /// / Semantic Kernel dev already does.
     /// </summary>
     public IList<AITool> Tools { get; } = new List<AITool>();
+
+    /// <summary>
+    /// Soft ceiling (estimated tokens) on the conversation sent to the model. When exceeded,
+    /// the <see cref="Compaction"/> strategy trims older messages before the next LLM call.
+    /// Mirrors the Rust engine's <c>max_context_tokens</c>.
+    /// </summary>
+    public int MaxContextTokens { get; set; } = 8000;
+
+    /// <summary>How to shrink the conversation when it exceeds <see cref="MaxContextTokens"/>.</summary>
+    public CompactionStrategy Compaction { get; set; } = CompactionStrategy.SlidingWindow;
 }

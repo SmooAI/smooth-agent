@@ -19,9 +19,19 @@ fixtures + eval scenarios**, not by identical type shapes — see
 
 ## Status
 
-**Phase 0 — the agentic loop** (shipped): `IChatClient`-driven loop, `AIFunction` tools,
-usage accumulation, max-iteration guard, streaming. `MockChatClient` test double. 5 parity
-tests green. See the phased roadmap in the Polyglot Cores doc.
+- **Phase 0 — the agentic loop** (shipped): `IChatClient`-driven loop, `AIFunction` tools,
+  usage accumulation, max-iteration guard, streaming. `MockChatClient` test double.
+- **Phase 1 — conversation + compaction** (shipped): `SmoothAgentThread` for multi-turn
+  history, `MaxContextTokens` budget + `SlidingWindow` compaction.
+
+9 parity tests green. See the phased roadmap in the Polyglot Cores doc.
+
+```csharp
+// Multi-turn: pass a thread to each run and it remembers.
+var thread = agent.GetNewThread();
+await agent.RunAsync("My name is Brent.", thread);
+var r = await agent.RunAsync("What's my name?", thread);   // "Your name is Brent."
+```
 
 ## Quickstart
 

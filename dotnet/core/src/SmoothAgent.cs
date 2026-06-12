@@ -15,6 +15,10 @@ namespace SmooAI.SmoothOperator.Core;
 /// <c>FunctionInvokingChatClient</c>) so later phases can layer in checkpointing,
 /// HITL pause/resume, knowledge/memory injection, cost budgets, and cast/subagents
 /// with smooth-operator's exact semantics.
+///
+/// Multi-turn conversations carry through a <see cref="SmoothAgentThread"/>; the
+/// conversation is trimmed to <see cref="AgentOptions.MaxContextTokens"/> before each
+/// LLM call via <see cref="AgentOptions.Compaction"/>.
 /// </summary>
 public sealed class SmoothAgent
 {
@@ -29,13 +33,22 @@ public sealed class SmoothAgent
         _functions = options.Tools.OfType<AIFunction>().ToDictionary(f => f.Name, StringComparer.Ordinal);
     }
 
+    /// <summary>Start a fresh conversation thread for multi-turn use. (MAF: <c>GetNewThread</c>.)</summary>
+    public SmoothAgentThread GetNewThread() => new();
+
+    /// <summary>Run a single stateless turn (no carried history).</summary>
+    public Task<AgentRunResponse> RunAsync(string message, CancellationToken cancellationToken = default) =>
+        RunAsync(message, null, cancellationToken);
+
     /// <summary>
-    /// Run the agent to completion and return the terminal <see cref="AgentRunResponse"/>.
-    /// (MAF naming: <c>RunAsync</c>.)
+    /// Run a turn within <paramref name="thread"/> (or stateless if null). The thread's prior
+    /// messages are prepended; the new user/assistant/tool messages from this turn are appended
+    /// back to it. (MAF naming: <c>RunAsync</c>.)
     /// </summary>
-    public async Task<AgentRunResponse> RunAsync(string message, CancellationToken cancellationToken = default)
+    public async Task<AgentRunResponse> RunAsync(string message, SmoothAgentThread? thread, CancellationToken cancellationToken = default)
     {
-        var messages = SeedConversation(message);
+        var working = SeedConversation(message, thread);
+        var newThisTurn = new List<ChatMessage> { working[^1] }; // the live user message
         var chatOptions = BuildChatOptions();
         var usage = new UsageDetails();
         var iterations = 0;
@@ -43,9 +56,12 @@ public sealed class SmoothAgent
         while (true)
         {
             iterations++;
-            var response = await _chatClient.GetResponseAsync(messages, chatOptions, cancellationToken).ConfigureAwait(false);
+            Compactor.Compact(working, _options.Compaction, _options.MaxContextTokens);
+
+            var response = await _chatClient.GetResponseAsync(working, chatOptions, cancellationToken).ConfigureAwait(false);
             Accumulate(usage, response.Usage);
-            messages.AddRange(response.Messages);
+            working.AddRange(response.Messages);
+            newThisTurn.AddRange(response.Messages);
 
             var calls = ExtractToolCalls(response.Messages);
             if (calls.Count == 0 || iterations >= _options.MaxIterations)
@@ -53,37 +69,49 @@ public sealed class SmoothAgent
                 break;
             }
 
-            messages.Add(await ExecuteToolsAsync(calls, cancellationToken).ConfigureAwait(false));
+            var toolMessage = await ExecuteToolsAsync(calls, cancellationToken).ConfigureAwait(false);
+            working.Add(toolMessage);
+            newThisTurn.Add(toolMessage);
         }
 
-        return new AgentRunResponse(messages, usage, iterations);
+        thread?.AddRange(newThisTurn);
+        return new AgentRunResponse(newThisTurn, usage, iterations);
     }
 
+    /// <summary>Stream a single stateless turn.</summary>
+    public IAsyncEnumerable<ChatResponseUpdate> RunStreamingAsync(string message, CancellationToken cancellationToken = default) =>
+        RunStreamingAsync(message, null, cancellationToken);
+
     /// <summary>
-    /// Run the agent and stream model output as it arrives. Yields the underlying
-    /// <see cref="ChatResponseUpdate"/>s (token deltas, tool-call fragments) across every
-    /// loop iteration. (MAF naming: <c>RunStreamingAsync</c>.)
+    /// Stream a turn within <paramref name="thread"/> (or stateless if null), yielding the
+    /// model's <see cref="ChatResponseUpdate"/>s across every loop iteration. New messages are
+    /// appended back to the thread when the turn completes. (MAF naming: <c>RunStreamingAsync</c>.)
     /// </summary>
     public async IAsyncEnumerable<ChatResponseUpdate> RunStreamingAsync(
         string message,
+        SmoothAgentThread? thread,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var messages = SeedConversation(message);
+        var working = SeedConversation(message, thread);
+        var newThisTurn = new List<ChatMessage> { working[^1] };
         var chatOptions = BuildChatOptions();
         var iterations = 0;
 
         while (true)
         {
             iterations++;
+            Compactor.Compact(working, _options.Compaction, _options.MaxContextTokens);
+
             var updates = new List<ChatResponseUpdate>();
-            await foreach (var update in _chatClient.GetStreamingResponseAsync(messages, chatOptions, cancellationToken).ConfigureAwait(false))
+            await foreach (var update in _chatClient.GetStreamingResponseAsync(working, chatOptions, cancellationToken).ConfigureAwait(false))
             {
                 updates.Add(update);
                 yield return update;
             }
 
             var response = updates.ToChatResponse();
-            messages.AddRange(response.Messages);
+            working.AddRange(response.Messages);
+            newThisTurn.AddRange(response.Messages);
 
             var calls = ExtractToolCalls(response.Messages);
             if (calls.Count == 0 || iterations >= _options.MaxIterations)
@@ -91,16 +119,24 @@ public sealed class SmoothAgent
                 break;
             }
 
-            messages.Add(await ExecuteToolsAsync(calls, cancellationToken).ConfigureAwait(false));
+            var toolMessage = await ExecuteToolsAsync(calls, cancellationToken).ConfigureAwait(false);
+            working.Add(toolMessage);
+            newThisTurn.Add(toolMessage);
         }
+
+        thread?.AddRange(newThisTurn);
     }
 
-    private List<ChatMessage> SeedConversation(string userMessage)
+    private List<ChatMessage> SeedConversation(string userMessage, SmoothAgentThread? thread)
     {
         var messages = new List<ChatMessage>();
         if (!string.IsNullOrEmpty(_options.Instructions))
         {
             messages.Add(new ChatMessage(ChatRole.System, _options.Instructions));
+        }
+        if (thread is not null)
+        {
+            messages.AddRange(thread.Messages);
         }
         messages.Add(new ChatMessage(ChatRole.User, userMessage));
         return messages;

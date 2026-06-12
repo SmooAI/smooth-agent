@@ -36,6 +36,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Let the test project exercise internal helpers (e.g. Compactor). -->
+    <InternalsVisibleTo Include="SmooAI.SmoothOperator.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- The engine is built ON Microsoft.Extensions.AI: IChatClient is the model
          abstraction, ChatMessage/AIFunction/FunctionCallContent the conversation +
          tool types. Any MEAI provider plugs in; a normal C# method becomes a tool. -->
