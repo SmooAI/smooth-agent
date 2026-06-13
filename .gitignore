@@ -1,7 +1,8 @@
 # Rust
 target/
 **/*.rs.bk
-Cargo.lock
+# Cargo.lock IS committed: this workspace ships a binary (smooth-operator-server)
+# and the Dockerfile builds with `cargo build --locked`, which requires it.
 
 # Node / TypeScript
 node_modules/
