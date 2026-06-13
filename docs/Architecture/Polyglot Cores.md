@@ -182,8 +182,13 @@ client's `ProtocolValidator`).
   (the .NET parity of mocking external APIs) — so it runs in CI without hitting GitHub. End-to-end
   test: GitHub docs → pipeline → queryable answers. *Still open:* wiring an `/admin/connectors/{id}/index`
   trigger (Phase 5).
-- **Server Phase 4 — ACL + auth**: `Principal` / `AccessContext` from the JWT/trusted token,
-  ACL-filtered retrieval (`knowledge_for_access`).
+- **Server Phase 4 — ACL + auth** *(primitives shipped)*: `Principal` / `AccessContext` +
+  `TokenAccessResolver` (HS256 JWT verify, trusted base64url identity, **fail-closed** to anonymous
+  on absent/malformed/forged/expired). `DocumentAcl` + `AclKnowledgeStore` filter retrieval by the
+  caller's groups BEFORE scoring — the C# `knowledge_for_access`. Parity tests mirror the Rust
+  `acl_chat_leak` suite (anonymous → public-only, entitled → private, unentitled → no leak) +
+  forged/expired JWT fail-closed. *Next:* thread `AccessContext` from the `?token=` slot through
+  the dispatcher → runner so the live chat path enforces it end-to-end (+ a Postgres `acl` column).
 - **Server Phase 5 — tool/HITL `stream_chunk`s, the reranker, the `/admin/*` API**.
 - **Server Phase 6 — deployable host + conformance/eval in CI** (container, SST / k8s).
 
