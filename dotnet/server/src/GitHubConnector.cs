@@ -57,6 +57,17 @@ public sealed class GitHubConnector : IConnector
             yield break;
         }
 
+        // GitHub's recursive trees API returns a PARTIAL tree with truncated=true when the repo is
+        // too large (>100k entries / >7MB). Ingesting that partial tree silently would index an
+        // incomplete repo and report success — answers would be confidently incomplete. Fail loud so
+        // the operator sees it (surfaced as a per-repo error) and can ingest sub-paths instead.
+        if (tree.Truncated)
+        {
+            throw new InvalidOperationException(
+                $"GitHub tree for {_owner}/{_repo}@{_ref} is truncated (repo too large for the recursive trees API); " +
+                "ingestion would be incomplete. Ingest narrower paths/refs instead.");
+        }
+
         foreach (var entry in tree.Tree)
         {
             if (entry.Type != "blob" || string.IsNullOrEmpty(entry.Path) || !IsTextFile(entry.Path))
@@ -104,7 +115,9 @@ public sealed class GitHubConnector : IConnector
         return CodeExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase) ? DocumentType.Code : DocumentType.Documentation;
     }
 
-    private sealed record TreeResponse([property: JsonPropertyName("tree")] List<TreeEntry>? Tree);
+    private sealed record TreeResponse(
+        [property: JsonPropertyName("tree")] List<TreeEntry>? Tree,
+        [property: JsonPropertyName("truncated")] bool Truncated = false);
 
     private sealed record TreeEntry(
         [property: JsonPropertyName("path")] string? Path,

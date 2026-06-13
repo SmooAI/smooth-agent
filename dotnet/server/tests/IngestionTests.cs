@@ -146,6 +146,25 @@ public class IngestionTests
         Assert.Contains(hits, h => h.Chunk.Contains("17 days"));
     }
 
+    [Fact]
+    public async Task GitHubConnector_TruncatedTree_FailsLoud_NotSilentlyPartial()
+    {
+        // GitHub returns truncated=true (partial tree) for huge repos. Ingesting that silently would
+        // build an incomplete index that reports success; the connector must fail loud instead.
+        const string treeJson = """{"truncated":true,"tree":[{"path":"README.md","type":"blob"}]}""";
+        var handler = new FakeHttpHandler(request =>
+            request.RequestUri!.ToString().Contains("git/trees") ? Json(treeJson) : Text("partial"));
+        var connector = new GitHubConnector("acme", "huge", new HttpClient(handler));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (var _ in connector.PullAsync())
+            {
+            }
+        });
+        Assert.Contains("truncated", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static HttpResponseMessage Json(string body) =>
         new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
