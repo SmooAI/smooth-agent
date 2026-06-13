@@ -66,6 +66,31 @@ public sealed class AclKnowledgeStore : IAccessKnowledge
     /// <summary>A read-only knowledge handle scoped to <paramref name="access"/> (ACL-filtered).</summary>
     public IKnowledgeBase? ForAccess(AccessContext access) => new ScopedView(this, access);
 
+    /// <summary>
+    /// A write-only knowledge handle that stamps <paramref name="acl"/> on everything ingested
+    /// through it — so the ingest pipeline can feed a connector's docs in with a repo's entitlement
+    /// group (e.g. <c>github:owner/repo</c>) without the pipeline knowing about ACLs.
+    /// </summary>
+    public IKnowledgeBase WithAcl(DocumentAcl acl) => new IngestView(this, acl);
+
+    private sealed class IngestView : IKnowledgeBase
+    {
+        private readonly AclKnowledgeStore _store;
+        private readonly DocumentAcl _acl;
+
+        public IngestView(AclKnowledgeStore store, DocumentAcl acl)
+        {
+            _store = store;
+            _acl = acl;
+        }
+
+        public Task IngestAsync(KnowledgeDocument document, CancellationToken cancellationToken = default) =>
+            _store.IngestAsync(document, _acl, cancellationToken);
+
+        public Task<IReadOnlyList<KnowledgeResult>> QueryAsync(string query, int limit, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("An ingest view is write-only; query through ForAccess(access).");
+    }
+
     private sealed class ScopedView : IKnowledgeBase
     {
         private readonly AclKnowledgeStore _store;

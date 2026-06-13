@@ -190,7 +190,13 @@ client's `ProtocolValidator`).
   forged/expired JWT fail-closed. *Next:* thread `AccessContext` from the `?token=` slot through
   the dispatcher → runner so the live chat path enforces it end-to-end (+ a Postgres `acl` column).
 - **Server Phase 5 — tool/HITL `stream_chunk`s, the reranker, the `/admin/*` API**.
-- **Server Phase 6 — deployable host + conformance/eval in CI** (container, SST / k8s).
+- **Server Phase 6 — deployable host** *(shipped)*: `SmooAI.SmoothOperator.Server.Host` — a
+  runnable ASP.NET app that wires the model (OpenAI-compatible gateway), storage (Postgres or
+  in-memory), auth (jwt/trusted/none), and **startup GitHub ingestion** (each repo's docs stamped
+  with its `github:owner/repo` ACL group) from env config; serves `/health` + `/ws`. A Dockerfile
+  ships it as a container. A boot test (WebApplicationFactory) proves it serves `/health` + a WS
+  ping with a mocked model (CI-safe). *Still open:* a Postgres `acl` column (the ACL store is
+  in-memory, re-ingested on boot), the reranker, and the `/admin/*` API.
 
 ## Adding the Nth language core
 
