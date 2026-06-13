@@ -17,6 +17,8 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public PostgresAclKnowledgeStore? AclKnowledge { get; private set; }
 
+    public PostgresCheckpointStore? CheckpointStore { get; private set; }
+
     public string? ConnectionString { get; private set; }
 
     public bool Available => Store is not null && ConnectionString is not null;
@@ -33,6 +35,7 @@ public sealed class PostgresFixture : IAsyncLifetime
             Store = await PostgresSessionStore.CreateAsync(ConnectionString);
             Knowledge = await PostgresKnowledgeBase.CreateAsync(ConnectionString, new DeterministicEmbedder(256));
             AclKnowledge = await PostgresAclKnowledgeStore.CreateAsync(ConnectionString, new DeterministicEmbedder(256));
+            CheckpointStore = await PostgresCheckpointStore.CreateAsync(ConnectionString);
         }
         catch
         {
@@ -40,12 +43,17 @@ public sealed class PostgresFixture : IAsyncLifetime
             Store = null;
             Knowledge = null;
             AclKnowledge = null;
+            CheckpointStore = null;
             ConnectionString = null;
         }
     }
 
     public async Task DisposeAsync()
     {
+        if (CheckpointStore is not null)
+        {
+            await CheckpointStore.DisposeAsync();
+        }
         if (AclKnowledge is not null)
         {
             await AclKnowledge.DisposeAsync();

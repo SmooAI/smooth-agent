@@ -173,7 +173,13 @@ client's `ProtocolValidator`).
   a fresh store instance). The **knowledge adapter** is also shipped: an `IEmbedder` seam (+
   `DeterministicEmbedder`) and a `PostgresKnowledgeBase` (pgvector — embed on ingest, cosine-rank
   on query), with the `IKnowledgeBase` contract asserted against **both** the in-memory (lexical)
-  and Postgres (vector) stores. *Still open:* the checkpoint adapter on Postgres.
+  and Postgres (vector) stores. The **checkpoint adapter** is also shipped: a `PostgresCheckpointStore`
+  (the `agent_checkpoints` table — messages as JSONB role+text, `BIGSERIAL seq` as the "latest"
+  source of truth, `Save`/`LoadLatest`/`List`/`Prune`), with the `ICheckpointStore` contract asserted
+  against **both** the in-memory and Postgres stores — durable agent state for resumable agentic
+  loops, the C# analog of the Rust `PostgresCheckpointStore`. *Still open:* wiring it into an agent
+  run loop with resume (the server's `TurnRunner` is single-turn today, so the adapter exists and is
+  contract-tested but isn't yet consumed on the live path).
 - **Server Phase 3 — ingestion + connectors** *(shipped)*: `IConnector` (+ `MockConnector`), a
   `Chunker` (overlapping, size-bounded, whitespace-aware), an `IngestPipeline`
   (connector → chunk → embed → store into the `IKnowledgeBase`), and a `GitHubConnector` (lists
