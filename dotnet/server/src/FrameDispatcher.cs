@@ -61,26 +61,36 @@ public sealed class FrameDispatcher
         var action = frame["action"]?.GetValue<string>();
         var requestId = frame["requestId"]?.GetValue<string>();
 
-        switch (action)
+        try
         {
-            case "ping":
-                sink(ProtocolEvents.Pong(requestId));
-                break;
-            case "create_conversation_session":
-                await HandleCreateSessionAsync(frame, requestId, sink, cancellationToken).ConfigureAwait(false);
-                break;
-            case "get_session":
-                await HandleGetSessionAsync(frame, requestId, sink, cancellationToken).ConfigureAwait(false);
-                break;
-            case "send_message":
-                await HandleSendMessageAsync(frame, requestId, sink, cancellationToken).ConfigureAwait(false);
-                break;
-            case null:
-                sink(ProtocolEvents.Error(requestId, "VALIDATION_ERROR", "Missing 'action'"));
-                break;
-            default:
-                sink(ProtocolEvents.Error(requestId, "UNSUPPORTED_ACTION", $"Unsupported action '{action}'"));
-                break;
+            switch (action)
+            {
+                case "ping":
+                    sink(ProtocolEvents.Pong(requestId));
+                    break;
+                case "create_conversation_session":
+                    await HandleCreateSessionAsync(frame, requestId, sink, cancellationToken).ConfigureAwait(false);
+                    break;
+                case "get_session":
+                    await HandleGetSessionAsync(frame, requestId, sink, cancellationToken).ConfigureAwait(false);
+                    break;
+                case "send_message":
+                    await HandleSendMessageAsync(frame, requestId, sink, cancellationToken).ConfigureAwait(false);
+                    break;
+                case null:
+                    sink(ProtocolEvents.Error(requestId, "VALIDATION_ERROR", "Missing 'action'"));
+                    break;
+                default:
+                    sink(ProtocolEvents.Error(requestId, "UNSUPPORTED_ACTION", $"Unsupported action '{action}'"));
+                    break;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A handler failed mid-turn (retrieval/embedding/model/DB error, or a bug). Emit a clean
+            // error and KEEP the connection alive — never drop the socket with no signal to the
+            // client. (Generic message: exception detail stays server-side, not leaked over the wire.)
+            sink(ProtocolEvents.Error(requestId, "INTERNAL_ERROR", "Internal error processing the request."));
         }
     }
 

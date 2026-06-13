@@ -132,6 +132,64 @@ public class WebSocketProtocolIntegrationTests
     }
 
     [Fact]
+    public async Task HandlerException_EmitsError_AndKeepsConnectionAlive()
+    {
+        // A turn that throws (here: knowledge retrieval is unreachable — e.g. the embedding gateway
+        // is down) must surface as a clean error event and NOT drop the connection. Otherwise any
+        // unexpected error mid-turn silently kills the socket with no signal to the client.
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        builder.Services.AddSingleton<IChatClient>(new MockChatClient().PushText("never reached"));
+        builder.Services.AddSingleton<IAccessKnowledge>(new ThrowingAccessKnowledge());
+        builder.Services.AddSmoothOperatorServer();
+        await using var app = builder.Build();
+        app.MapSmoothOperatorWebSocket("/ws");
+        await app.StartAsync();
+        using var socket = await ConnectAsync(app.GetTestServer());
+
+        await SendAsync(socket, """{"action":"create_conversation_session","requestId":"cs"}""");
+        var sessionId = (await ReceiveAsync(socket))["data"]!["sessionId"]!.GetValue<string>();
+
+        await SendAsync(socket, $$"""{"action":"send_message","requestId":"sm","sessionId":"{{sessionId}}","message":"hi"}""");
+        var sawError = false;
+        JsonObject ev;
+        do
+        {
+            ev = await ReceiveAsync(socket);
+            if (ev["type"]!.GetValue<string>() == "error")
+            {
+                sawError = true;
+                break;
+            }
+        }
+        while (ev["type"]!.GetValue<string>() != "eventual_response");
+        Assert.True(sawError, "a handler exception should surface as an error event");
+
+        // The connection survives — a subsequent ping still works.
+        await SendAsync(socket, """{"action":"ping","requestId":"ping-after"}""");
+        var pong = await ReceiveAsync(socket);
+        Assert.Equal("pong", pong["type"]!.GetValue<string>());
+
+        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
+        await app.StopAsync();
+    }
+
+    /// <summary>Knowledge whose retrieval always throws — stands in for the embedding/vector store being down.</summary>
+    private sealed class ThrowingAccessKnowledge : IAccessKnowledge
+    {
+        public IKnowledgeBase? ForAccess(AccessContext access) => new ThrowingKnowledgeBase();
+
+        private sealed class ThrowingKnowledgeBase : IKnowledgeBase
+        {
+            public Task IngestAsync(KnowledgeDocument document, CancellationToken cancellationToken = default) =>
+                throw new NotSupportedException();
+
+            public Task<IReadOnlyList<KnowledgeResult>> QueryAsync(string query, int limit, CancellationToken cancellationToken = default) =>
+                throw new InvalidOperationException("knowledge store unreachable");
+        }
+    }
+
+    [Fact]
     public async Task Acl_PrivateDoc_OnlyReachesEntitledUser_OverWebSocket()
     {
         var kb = new AclKnowledgeStore();
