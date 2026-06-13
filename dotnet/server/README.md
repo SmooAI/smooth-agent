@@ -29,8 +29,23 @@ The event sequence for a turn — `immediate_response` (202) → `stream_token`(
 `eventual_response` (200, with `messageId` + `response.responseParts` + `citations`) — is
 produced and schema-validated. 5 conformance tests.
 
-**Next:** the ASP.NET Core WebSocket `/ws` host, then durable Postgres storage, ingestion +
-connectors, ACL + auth, and a deployable host. See the
+**Phase 1 (the WebSocket host)** is also shipped, in the sibling
+`SmooAI.SmoothOperator.Server.AspNetCore` project:
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddSingleton<IChatClient>(/* your model */);
+builder.Services.AddSmoothOperatorServer();          // store + runner + dispatcher
+var app = builder.Build();
+app.MapSmoothOperatorWebSocket("/ws");               // the protocol endpoint
+app.Run();
+```
+
+Integration tests boot this host in-process and drive a **real WebSocket** — the C# parity of
+the Rust server's `tests/protocol_smoke.rs`.
+
+**Next:** durable Postgres storage, ingestion + connectors, ACL + auth, then a deployable
+container. See the
 [Server roadmap](../../docs/Architecture/Polyglot%20Cores.md#server-roadmap-c) in the
 Polyglot Cores doc.
 

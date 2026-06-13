@@ -158,8 +158,12 @@ client's `ProtocolValidator`).
   / `get_session` / `send_message` by `action`. Produces the exact event sequence
   (`immediate_response` 202 → `stream_token`s → `eventual_response` 200, triple-nested data +
   citations), each frame **schema-validated**. 5 conformance tests.
-- **Server Phase 1 — WebSocket host**: an ASP.NET Core `/ws` endpoint wiring the dispatcher (the
-  endpoint the widget / clients connect to), the `?token=` auth slot, keepalive.
+- **Server Phase 1 — WebSocket host** *(shipped)*: `SmooAI.SmoothOperator.Server.AspNetCore` —
+  `app.MapSmoothOperatorWebSocket("/ws")` + `AddSmoothOperatorServer()` DI. A channel-backed
+  pump (single writer, multi-frame receive) mirrors the Rust sink/writer split.
+  **Integration tests** boot the host in-process (TestServer) and drive a **real WebSocket** —
+  the C# parity of `rust/.../tests/protocol_smoke.rs` (ping→pong, create_session descriptor with
+  echoed UUID agentId, full send_message stream, unknown-action-doesn't-drop-connection).
 - **Server Phase 2 — durable storage**: a Postgres+pgvector `ISessionStore` + knowledge/checkpoint
   adapters (the engine + server ship in-memory today).
 - **Server Phase 3 — ingestion + connectors**: the GitHub connector + ingest pipeline (chunk →
