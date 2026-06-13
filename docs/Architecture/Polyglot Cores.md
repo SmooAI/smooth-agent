@@ -174,8 +174,14 @@ client's `ProtocolValidator`).
   `DeterministicEmbedder`) and a `PostgresKnowledgeBase` (pgvector — embed on ingest, cosine-rank
   on query), with the `IKnowledgeBase` contract asserted against **both** the in-memory (lexical)
   and Postgres (vector) stores. *Still open:* the checkpoint adapter on Postgres.
-- **Server Phase 3 — ingestion + connectors**: the GitHub connector + ingest pipeline (chunk →
-  embed → store), `/admin/connectors/{id}/index`.
+- **Server Phase 3 — ingestion + connectors** *(shipped)*: `IConnector` (+ `MockConnector`), a
+  `Chunker` (overlapping, size-bounded, whitespace-aware), an `IngestPipeline`
+  (connector → chunk → embed → store into the `IKnowledgeBase`), and a `GitHubConnector` (lists
+  the repo tree, fetches text/code files). The connector contract is asserted against the
+  `MockConnector`, and the GitHub connector is unit-tested against a **fake `HttpMessageHandler`**
+  (the .NET parity of mocking external APIs) — so it runs in CI without hitting GitHub. End-to-end
+  test: GitHub docs → pipeline → queryable answers. *Still open:* wiring an `/admin/connectors/{id}/index`
+  trigger (Phase 5).
 - **Server Phase 4 — ACL + auth**: `Principal` / `AccessContext` from the JWT/trusted token,
   ACL-filtered retrieval (`knowledge_for_access`).
 - **Server Phase 5 — tool/HITL `stream_chunk`s, the reranker, the `/admin/*` API**.
