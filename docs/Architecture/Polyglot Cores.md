@@ -170,8 +170,10 @@ client's `ProtocolValidator`).
   `CREATE TABLE IF NOT EXISTS`). A **shared `ISessionStore` contract test runs against both the
   in-memory and Postgres adapters** (the Rust adapter-parity pattern), on a real Postgres via
   Testcontainers (Docker-gated, skips cleanly otherwise) — plus a durability test (data survives
-  a fresh store instance). *Next within this phase:* knowledge + checkpoint adapters on
-  Postgres+pgvector.
+  a fresh store instance). The **knowledge adapter** is also shipped: an `IEmbedder` seam (+
+  `DeterministicEmbedder`) and a `PostgresKnowledgeBase` (pgvector — embed on ingest, cosine-rank
+  on query), with the `IKnowledgeBase` contract asserted against **both** the in-memory (lexical)
+  and Postgres (vector) stores. *Still open:* the checkpoint adapter on Postgres.
 - **Server Phase 3 — ingestion + connectors**: the GitHub connector + ingest pipeline (chunk →
   embed → store), `/admin/connectors/{id}/index`.
 - **Server Phase 4 — ACL + auth**: `Principal` / `AccessContext` from the JWT/trusted token,

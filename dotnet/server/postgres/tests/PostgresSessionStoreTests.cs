@@ -13,6 +13,8 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public PostgresSessionStore? Store { get; private set; }
 
+    public PostgresKnowledgeBase? Knowledge { get; private set; }
+
     public string? ConnectionString { get; private set; }
 
     public bool Available => Store is not null && ConnectionString is not null;
@@ -21,21 +23,29 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         try
         {
-            _container = new PostgreSqlBuilder().WithImage("postgres:16-alpine").Build();
+            // The pgvector image is a superset of postgres — serves both the OLTP session store
+            // and the vector-searched knowledge adapter from one container.
+            _container = new PostgreSqlBuilder().WithImage("pgvector/pgvector:pg16").Build();
             await _container.StartAsync();
             ConnectionString = _container.GetConnectionString();
             Store = await PostgresSessionStore.CreateAsync(ConnectionString);
+            Knowledge = await PostgresKnowledgeBase.CreateAsync(ConnectionString, new DeterministicEmbedder(256));
         }
         catch
         {
             // Docker not reachable — leave Available == false so tests skip.
             Store = null;
+            Knowledge = null;
             ConnectionString = null;
         }
     }
 
     public async Task DisposeAsync()
     {
+        if (Knowledge is not null)
+        {
+            await Knowledge.DisposeAsync();
+        }
         if (Store is not null)
         {
             await Store.DisposeAsync();
