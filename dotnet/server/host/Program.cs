@@ -37,8 +37,11 @@ if (!string.IsNullOrEmpty(databaseUrl))
         PostgresSessionStore.CreateAsync(ToNpgsqlConnectionString(databaseUrl)).GetAwaiter().GetResult());
 }
 
-// ── Knowledge: ACL-aware store, ingested at startup; ACL is enforced on the chat path ──
-var knowledge = new AclKnowledgeStore();
+// ── Knowledge: ACL-aware store (durable Postgres+pgvector when a DB is configured, else in-memory),
+//    ingested at startup; ACL is enforced on the chat path ──
+IAclKnowledge knowledge = string.IsNullOrEmpty(databaseUrl)
+    ? new AclKnowledgeStore()
+    : await PostgresAclKnowledgeStore.CreateAsync(ToNpgsqlConnectionString(databaseUrl), new DeterministicEmbedder());
 builder.Services.AddSingleton<IAccessKnowledge>(knowledge);
 
 // ── Auth: jwt (verified) / trusted (proxied) / none ──
@@ -65,7 +68,7 @@ if (repos.Length > 0)
 
 app.Run();
 
-static async Task IngestReposAsync(string[] repos, string token, AclKnowledgeStore knowledge, ILogger logger)
+static async Task IngestReposAsync(string[] repos, string token, IAclKnowledge knowledge, ILogger logger)
 {
     using var http = new HttpClient();
     http.DefaultRequestHeaders.UserAgent.ParseAdd("smooth-operator-server");

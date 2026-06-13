@@ -42,6 +42,21 @@ public interface IAccessKnowledge
 }
 
 /// <summary>
+/// An ACL-aware knowledge store: ingest documents with a <see cref="DocumentAcl"/>, retrieve through
+/// <see cref="IAccessKnowledge.ForAccess"/> with the result filtered by the caller's groups. The same
+/// contract is satisfied by the in-memory store and the durable Postgres store, so they're
+/// interchangeable.
+/// </summary>
+public interface IAclKnowledge : IAccessKnowledge
+{
+    Task IngestAsync(KnowledgeDocument document, DocumentAcl acl, CancellationToken cancellationToken = default);
+
+    /// <summary>A write-only knowledge handle that stamps <paramref name="acl"/> on everything ingested
+    /// through it — lets the ingest pipeline feed a connector's docs in with a repo's entitlement group.</summary>
+    IKnowledgeBase WithAcl(DocumentAcl acl);
+}
+
+/// <summary>
 /// Wraps a plain <see cref="IKnowledgeBase"/> with no ACL filtering — for deployments that don't
 /// use per-document access control (every doc is org-public).
 /// </summary>
@@ -61,7 +76,7 @@ public sealed class StaticAccessKnowledge : IAccessKnowledge
 /// <c>knowledge_for_access</c> seam that closed the #1 adversarial leak (private repo docs
 /// retrievable by any chat user).
 /// </summary>
-public sealed class AclKnowledgeStore : IAccessKnowledge
+public sealed class AclKnowledgeStore : IAclKnowledge
 {
     /// <summary>A read-only knowledge handle scoped to <paramref name="access"/> (ACL-filtered).</summary>
     public IKnowledgeBase? ForAccess(AccessContext access) => new ScopedView(this, access);

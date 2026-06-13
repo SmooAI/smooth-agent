@@ -195,8 +195,12 @@ client's `ProtocolValidator`).
   in-memory), auth (jwt/trusted/none), and **startup GitHub ingestion** (each repo's docs stamped
   with its `github:owner/repo` ACL group) from env config; serves `/health` + `/ws`. A Dockerfile
   ships it as a container. A boot test (WebApplicationFactory) proves it serves `/health` + a WS
-  ping with a mocked model (CI-safe). *Still open:* a Postgres `acl` column (the ACL store is
-  in-memory, re-ingested on boot), the reranker, and the `/admin/*` API.
+  ping with a mocked model (CI-safe). The host uses the durable **`PostgresAclKnowledgeStore`**
+  (pgvector + `acl_public`/`acl_groups`, the ACL filtered **in SQL** — `acl_groups && @groups`)
+  when a database is configured, with the ACL leak contract asserted against **both** the
+  in-memory and Postgres ACL stores. *Still open:* the reranker, the `/admin/*` API, a real
+  gateway embedder (the durable store uses the deterministic embedder today), and a
+  live-gateway integration test.
 
 ## Adding the Nth language core
 
