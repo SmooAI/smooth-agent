@@ -51,14 +51,14 @@ public sealed class TurnRunner
         // 2. Build the agent + replay prior history as memory (before persisting this turn's inbound).
         var agent = new SmoothAgent(_chatClient, new AgentOptions { Instructions = _systemPrompt, Knowledge = _knowledge });
         var thread = agent.GetNewThread();
-        foreach (var message in _store.ListMessages(conversationId, MaxPriorMessages))
+        foreach (var message in await _store.ListMessagesAsync(conversationId, MaxPriorMessages, cancellationToken).ConfigureAwait(false))
         {
             var role = message.Direction == MessageDirection.Outbound ? ChatRole.Assistant : ChatRole.User;
             thread.Add(new ChatMessage(role, message.Text));
         }
 
         // 3. Persist the inbound user message.
-        _store.AppendMessage(conversationId, MessageDirection.Inbound, userMessage);
+        await _store.AppendMessageAsync(conversationId, MessageDirection.Inbound, userMessage, cancellationToken).ConfigureAwait(false);
 
         // 4. Stream the turn, emitting a stream_token per delta.
         var reply = new StringBuilder();
@@ -73,7 +73,7 @@ public sealed class TurnRunner
         }
 
         // 5. Persist the outbound reply and return.
-        var outbound = _store.AppendMessage(conversationId, MessageDirection.Outbound, reply.ToString());
+        var outbound = await _store.AppendMessageAsync(conversationId, MessageDirection.Outbound, reply.ToString(), cancellationToken).ConfigureAwait(false);
         return new TurnResult(reply.ToString(), outbound.Id, citations);
     }
 

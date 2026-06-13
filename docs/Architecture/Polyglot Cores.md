@@ -164,8 +164,14 @@ client's `ProtocolValidator`).
   **Integration tests** boot the host in-process (TestServer) and drive a **real WebSocket** —
   the C# parity of `rust/.../tests/protocol_smoke.rs` (ping→pong, create_session descriptor with
   echoed UUID agentId, full send_message stream, unknown-action-doesn't-drop-connection).
-- **Server Phase 2 — durable storage**: a Postgres+pgvector `ISessionStore` + knowledge/checkpoint
-  adapters (the engine + server ship in-memory today).
+- **Server Phase 2 — durable storage** *(session store shipped)*: `ISessionStore` is now async
+  (matching the Rust `StorageAdapter`); `SmooAI.SmoothOperator.Server.Postgres` adds a
+  `PostgresSessionStore` (Npgsql; the `conversation_sessions` + `conversation_messages` tables,
+  `CREATE TABLE IF NOT EXISTS`). A **shared `ISessionStore` contract test runs against both the
+  in-memory and Postgres adapters** (the Rust adapter-parity pattern), on a real Postgres via
+  Testcontainers (Docker-gated, skips cleanly otherwise) — plus a durability test (data survives
+  a fresh store instance). *Next within this phase:* knowledge + checkpoint adapters on
+  Postgres+pgvector.
 - **Server Phase 3 — ingestion + connectors**: the GitHub connector + ingest pipeline (chunk →
   embed → store), `/admin/connectors/{id}/index`.
 - **Server Phase 4 — ACL + auth**: `Principal` / `AccessContext` from the JWT/trusted token,

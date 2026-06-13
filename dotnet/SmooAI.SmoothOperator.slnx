@@ -11,6 +11,8 @@
     <Project Path="server/tests/SmooAI.SmoothOperator.Server.Tests.csproj" />
     <Project Path="server/aspnetcore/SmooAI.SmoothOperator.Server.AspNetCore.csproj" />
     <Project Path="server/integration-tests/SmooAI.SmoothOperator.Server.IntegrationTests.csproj" />
+    <Project Path="server/postgres/src/SmooAI.SmoothOperator.Server.Postgres.csproj" />
+    <Project Path="server/postgres/tests/SmooAI.SmoothOperator.Server.Postgres.Tests.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SmooAI.SmoothOperator.Tests.csproj" />

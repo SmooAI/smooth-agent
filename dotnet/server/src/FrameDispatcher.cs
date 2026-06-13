@@ -47,10 +47,10 @@ public sealed class FrameDispatcher
                 sink(ProtocolEvents.Pong(requestId));
                 break;
             case "create_conversation_session":
-                HandleCreateSession(frame, requestId, sink);
+                await HandleCreateSessionAsync(frame, requestId, sink, cancellationToken).ConfigureAwait(false);
                 break;
             case "get_session":
-                HandleGetSession(frame, requestId, sink);
+                await HandleGetSessionAsync(frame, requestId, sink, cancellationToken).ConfigureAwait(false);
                 break;
             case "send_message":
                 await HandleSendMessageAsync(frame, requestId, sink, cancellationToken).ConfigureAwait(false);
@@ -64,12 +64,13 @@ public sealed class FrameDispatcher
         }
     }
 
-    private void HandleCreateSession(JsonObject frame, string? requestId, Action<JsonObject> sink)
+    private async Task HandleCreateSessionAsync(JsonObject frame, string? requestId, Action<JsonObject> sink, CancellationToken cancellationToken)
     {
-        var session = _store.CreateSession(
+        var session = await _store.CreateSessionAsync(
             frame["agentId"]?.GetValue<string>() ?? string.Empty,
             frame["userName"]?.GetValue<string>(),
-            frame["userEmail"]?.GetValue<string>());
+            frame["userEmail"]?.GetValue<string>(),
+            cancellationToken).ConfigureAwait(false);
 
         var data = new JsonObject
         {
@@ -83,9 +84,9 @@ public sealed class FrameDispatcher
         sink(ProtocolEvents.ImmediateResponse(requestId, 200, "Session created", data));
     }
 
-    private void HandleGetSession(JsonObject frame, string? requestId, Action<JsonObject> sink)
+    private async Task HandleGetSessionAsync(JsonObject frame, string? requestId, Action<JsonObject> sink, CancellationToken cancellationToken)
     {
-        var session = _store.GetSession(frame["sessionId"]?.GetValue<string>() ?? string.Empty);
+        var session = await _store.GetSessionAsync(frame["sessionId"]?.GetValue<string>() ?? string.Empty, cancellationToken).ConfigureAwait(false);
         if (session is null)
         {
             sink(ProtocolEvents.Error(requestId, "NOT_FOUND", "Session not found"));
@@ -105,7 +106,7 @@ public sealed class FrameDispatcher
     private async Task HandleSendMessageAsync(JsonObject frame, string? requestId, Action<JsonObject> sink, CancellationToken cancellationToken)
     {
         requestId ??= Guid.NewGuid().ToString();
-        var session = _store.GetSession(frame["sessionId"]?.GetValue<string>() ?? string.Empty);
+        var session = await _store.GetSessionAsync(frame["sessionId"]?.GetValue<string>() ?? string.Empty, cancellationToken).ConfigureAwait(false);
         if (session is null)
         {
             sink(ProtocolEvents.Error(requestId, "NOT_FOUND", "Session not found"));

@@ -44,8 +44,20 @@ app.Run();
 Integration tests boot this host in-process and drive a **real WebSocket** — the C# parity of
 the Rust server's `tests/protocol_smoke.rs`.
 
-**Next:** durable Postgres storage, ingestion + connectors, ACL + auth, then a deployable
-container. See the
+**Phase 2 (durable storage)** is shipped for the session store: `ISessionStore` is async, and
+`SmooAI.SmoothOperator.Server.Postgres` provides a `PostgresSessionStore` so sessions + history
+survive a restart. A shared `ISessionStore` contract test runs against **both** the in-memory and
+Postgres adapters (the Rust adapter-parity pattern), on a real Postgres via Testcontainers.
+
+```csharp
+// Swap durable storage in:
+builder.Services.AddSingleton<ISessionStore>(
+    await PostgresSessionStore.CreateAsync(connectionString));
+builder.Services.AddSmoothOperatorServer();   // uses the registered ISessionStore
+```
+
+**Next:** knowledge + checkpoint adapters on Postgres+pgvector, ingestion + connectors, ACL +
+auth, then a deployable container. See the
 [Server roadmap](../../docs/Architecture/Polyglot%20Cores.md#server-roadmap-c) in the
 Polyglot Cores doc.
 

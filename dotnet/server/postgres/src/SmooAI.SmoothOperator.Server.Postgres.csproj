@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>SmooAI.SmoothOperator.Server.Postgres</RootNamespace>
+    <AssemblyName>SmooAI.SmoothOperator.Server.Postgres</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <Description>Postgres-backed durable storage for SmooAI.SmoothOperator.Server — a PostgresSessionStore implementing ISessionStore, so sessions + conversation history survive a restart. The C# analog of the Rust adapters/postgres OLTP surface.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SmooAI.SmoothOperator.Server.csproj" />
+  </ItemGroup>
+
+</Project>
