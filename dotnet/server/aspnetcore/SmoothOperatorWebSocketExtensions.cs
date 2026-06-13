@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace SmooAI.SmoothOperator.Server.AspNetCore;
@@ -22,7 +23,7 @@ public static class SmoothOperatorWebSocketExtensions
     public static WebApplication MapSmoothOperatorWebSocket(this WebApplication app, string path = "/ws", Func<HttpContext, FrameDispatcher>? dispatcherFor = null)
     {
         app.UseWebSockets();
-        dispatcherFor ??= context => context.RequestServices.GetRequiredService<FrameDispatcher>();
+        dispatcherFor ??= BuildDispatcher;
 
         app.Map(path, async (HttpContext context) =>
         {
@@ -37,6 +38,25 @@ public static class SmoothOperatorWebSocketExtensions
         });
 
         return app;
+    }
+
+    /// <summary>
+    /// Build a per-connection dispatcher: resolve the <c>?token=</c> slot into an
+    /// <see cref="AccessContext"/> (browsers can't set WebSocket headers), then bind the dispatcher
+    /// to it so retrieval is ACL-scoped to this connection. Shared services come from DI.
+    /// </summary>
+    private static FrameDispatcher BuildDispatcher(HttpContext context)
+    {
+        var services = context.RequestServices;
+        var resolver = services.GetService<TokenAccessResolver>();
+        var token = context.Request.Query["token"].FirstOrDefault();
+        var access = resolver?.Resolve(token) ?? AccessContext.Anonymous;
+
+        return new FrameDispatcher(
+            services.GetRequiredService<ISessionStore>(),
+            services.GetRequiredService<IChatClient>(),
+            services.GetService<IAccessKnowledge>(),
+            access);
     }
 
     private static async Task PumpAsync(WebSocket socket, FrameDispatcher dispatcher, CancellationToken cancellationToken)

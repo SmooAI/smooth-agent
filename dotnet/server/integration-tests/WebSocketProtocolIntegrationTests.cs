@@ -1,11 +1,13 @@
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using SmooAI.SmoothOperator.Core;
 using SmooAI.SmoothOperator.Server.AspNetCore;
 
 namespace SmooAI.SmoothOperator.Server.IntegrationTests;
@@ -28,6 +30,77 @@ public class WebSocketProtocolIntegrationTests
         app.MapSmoothOperatorWebSocket("/ws");
         return app;
     }
+
+    private static WebApplication BuildAppWithAcl(IChatClient chat, AclKnowledgeStore knowledge, AuthMode mode)
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        builder.Services.AddSingleton(chat);
+        builder.Services.AddSingleton<IAccessKnowledge>(knowledge);
+        builder.Services.AddSingleton(new TokenAccessResolver(new AuthOptions { Mode = mode }));
+        builder.Services.AddSmoothOperatorServer();
+
+        var app = builder.Build();
+        app.MapSmoothOperatorWebSocket("/ws");
+        return app;
+    }
+
+    [Fact]
+    public async Task Acl_PrivateDoc_OnlyReachesEntitledUser_OverWebSocket()
+    {
+        var kb = new AclKnowledgeStore();
+        await kb.IngestAsync(new KnowledgeDocument("pub", "Support hours are 9 to 5.", "public.md"), DocumentAcl.PublicAcl);
+        await kb.IngestAsync(
+            new KnowledgeDocument("secret", "The private launch code is hunter2.", "acme/private/launch.md"),
+            DocumentAcl.ForGroups("github:acme/private"));
+
+        await using var app = BuildAppWithAcl(new MockChatClient().PushText("Here is what I found."), kb, AuthMode.Trusted);
+        await app.StartAsync();
+        var server = app.GetTestServer();
+
+        // The entitled user (token carries the group) sees the private doc among the citations.
+        var entitledToken = TrustedToken(new { sub = "u1", org = "acme", role = "basic", groups = new[] { "github:acme/private" } });
+        var entitled = await CitationSourcesAsync(server, entitledToken, "private launch code");
+        Assert.Contains("acme/private/launch.md", entitled);
+
+        // The anonymous user (no token) must NOT — the chat path enforces ACL end-to-end.
+        var anonymous = await CitationSourcesAsync(server, token: null, "private launch code");
+        Assert.DoesNotContain("acme/private/launch.md", anonymous);
+
+        await app.StopAsync();
+    }
+
+    private static async Task<List<string>> CitationSourcesAsync(TestServer server, string? token, string message)
+    {
+        var path = token is null ? "ws" : $"ws?token={token}";
+        using var socket = await server.CreateWebSocketClient().ConnectAsync(new Uri(server.BaseAddress, path), CancellationToken.None);
+
+        await SendAsync(socket, """{"action":"create_conversation_session","requestId":"cs"}""");
+        var sessionId = (await ReceiveAsync(socket))["data"]!["sessionId"]!.GetValue<string>();
+
+        await SendAsync(socket, $$"""{"action":"send_message","requestId":"sm","sessionId":"{{sessionId}}","message":"{{message}}"}""");
+        JsonObject terminal;
+        do
+        {
+            terminal = await ReceiveAsync(socket);
+        }
+        while (terminal["type"]!.GetValue<string>() != "eventual_response");
+
+        var sources = new List<string>();
+        if (terminal["data"]!["data"]!["citations"] is JsonArray citations)
+        {
+            foreach (var citation in citations)
+            {
+                sources.Add(citation!["title"]!.GetValue<string>());
+            }
+        }
+
+        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
+        return sources;
+    }
+
+    private static string TrustedToken(object claims) =>
+        Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(claims))).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     private static Task SendAsync(WebSocket socket, string json) =>
         socket.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);

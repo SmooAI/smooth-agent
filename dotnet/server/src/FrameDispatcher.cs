@@ -1,22 +1,38 @@
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.AI;
 
 namespace SmooAI.SmoothOperator.Server;
 
 /// <summary>
 /// Routes an incoming protocol frame (by its <c>action</c> discriminator) to the right handler and
 /// emits the response event(s) to <paramref>sink</paramref>. The C# analog of the Rust server's
-/// <c>handle_frame</c>. Transport-agnostic: a WebSocket host (later phase) calls
-/// <see cref="DispatchAsync"/> per inbound frame and writes the sink's events back over the socket.
+/// <c>handle_frame</c>. Transport-agnostic: a WebSocket host calls <see cref="DispatchAsync"/> per
+/// inbound frame and writes the sink's events back over the socket.
+///
+/// One dispatcher is bound to one connection's <see cref="AccessContext"/> (resolved from the
+/// <c>?token=</c> slot), and retrieval for each turn is scoped to it — so ACL is enforced on the
+/// live chat path, not just at ingest.
 /// </summary>
 public sealed class FrameDispatcher
 {
     private readonly ISessionStore _store;
-    private readonly TurnRunner _runner;
+    private readonly IChatClient _chatClient;
+    private readonly IAccessKnowledge? _knowledge;
+    private readonly AccessContext _access;
+    private readonly string? _systemPrompt;
 
-    public FrameDispatcher(ISessionStore store, TurnRunner runner)
+    public FrameDispatcher(
+        ISessionStore store,
+        IChatClient chatClient,
+        IAccessKnowledge? knowledge = null,
+        AccessContext? access = null,
+        string? systemPrompt = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
-        _runner = runner ?? throw new ArgumentNullException(nameof(runner));
+        _chatClient = chatClient ?? throw new ArgumentNullException(nameof(chatClient));
+        _knowledge = knowledge;
+        _access = access ?? AccessContext.Anonymous;
+        _systemPrompt = systemPrompt;
     }
 
     public async Task DispatchAsync(string rawFrame, Action<JsonObject> sink, CancellationToken cancellationToken = default)
@@ -118,8 +134,11 @@ public sealed class FrameDispatcher
         // 1. Immediate ack (202).
         sink(ProtocolEvents.ImmediateResponse(requestId, 202, "Processing your request...", new JsonObject()));
 
-        // 2. Stream the turn (emits stream_token events; returns reply + citations).
-        var result = await _runner.RunAsync(session.ConversationId, requestId, message, sink, cancellationToken).ConfigureAwait(false);
+        // 2. Stream the turn, retrieving through knowledge SCOPED to this connection's access — so a
+        //    user only ever sees documents their groups grant (ACL enforced on the chat path).
+        var scopedKnowledge = _knowledge?.ForAccess(_access);
+        var runner = new TurnRunner(_chatClient, _store, scopedKnowledge, _systemPrompt);
+        var result = await runner.RunAsync(session.ConversationId, requestId, message, sink, cancellationToken).ConfigureAwait(false);
 
         // 3. Terminal eventual_response.
         sink(ProtocolEvents.EventualResponse(

@@ -9,20 +9,16 @@ namespace SmooAI.SmoothOperator.Server.AspNetCore;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Register the server's session store, turn runner, and frame dispatcher. The host must also
-    /// register an <see cref="IChatClient"/> (the model) and may register an
-    /// <see cref="IKnowledgeBase"/> (for RAG grounding).
+    /// Register the server's session store. The host must also register an <see cref="IChatClient"/>
+    /// (the model), and may register an <see cref="IAccessKnowledge"/> (for ACL-scoped RAG grounding —
+    /// e.g. an <see cref="AclKnowledgeStore"/>, or a <see cref="StaticAccessKnowledge"/> wrapping a
+    /// plain knowledge base) and a <see cref="TokenAccessResolver"/> (to authenticate connections).
+    /// The frame dispatcher itself is built per-connection by the WebSocket host (it's bound to that
+    /// connection's resolved <see cref="AccessContext"/>).
     /// </summary>
     public static IServiceCollection AddSmoothOperatorServer(this IServiceCollection services)
     {
         services.TryAddSingleton<ISessionStore, InMemorySessionStore>();
-        services.TryAddSingleton(sp => new TurnRunner(
-            sp.GetRequiredService<IChatClient>(),
-            sp.GetRequiredService<ISessionStore>(),
-            sp.GetService<IKnowledgeBase>()));
-        services.TryAddSingleton(sp => new FrameDispatcher(
-            sp.GetRequiredService<ISessionStore>(),
-            sp.GetRequiredService<TurnRunner>()));
         return services;
     }
 }

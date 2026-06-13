@@ -14,8 +14,8 @@ public class ServerProtocolTests
     private static (FrameDispatcher Dispatcher, InMemorySessionStore Store, List<JsonObject> Events) Build(MockChatClient chat, IKnowledgeBase? knowledge = null)
     {
         var store = new InMemorySessionStore();
-        var runner = new TurnRunner(chat, store, knowledge);
-        return (new FrameDispatcher(store, runner), store, new List<JsonObject>());
+        var knowledgeAccess = knowledge is null ? null : new StaticAccessKnowledge(knowledge);
+        return (new FrameDispatcher(store, chat, knowledgeAccess), store, new List<JsonObject>());
     }
 
     private static async Task<ProtocolValidator> ValidatorAsync() => await ProtocolValidator.LoadAsync();
