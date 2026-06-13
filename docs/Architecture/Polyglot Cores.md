@@ -174,7 +174,8 @@ client's `ProtocolValidator`).
   `DeterministicEmbedder`) and a `PostgresKnowledgeBase` (pgvector — embed on ingest, cosine-rank
   on query), with the `IKnowledgeBase` contract asserted against **both** the in-memory (lexical)
   and Postgres (vector) stores. The **checkpoint adapter** is also shipped: a `PostgresCheckpointStore`
-  (the `agent_checkpoints` table — messages as JSONB role+text, `BIGSERIAL seq` as the "latest"
+  (the `agent_checkpoints` table — messages as JSONB preserving content kinds (text + tool
+  call + tool result, so a resumed agent keeps its tool history), `BIGSERIAL seq` as the "latest"
   source of truth, `Save`/`LoadLatest`/`List`/`Prune`), with the `ICheckpointStore` contract asserted
   against **both** the in-memory and Postgres stores — durable agent state for resumable agentic
   loops, the C# analog of the Rust `PostgresCheckpointStore`. *Still open:* wiring it into an agent

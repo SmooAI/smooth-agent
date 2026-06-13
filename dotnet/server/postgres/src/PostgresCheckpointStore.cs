@@ -129,12 +129,63 @@ public sealed class PostgresCheckpointStore : ICheckpointStore, IAsyncDisposable
     }
 
     private static string SerializeMessages(IReadOnlyList<ChatMessage> messages) =>
-        JsonSerializer.Serialize(messages.Select(m => new MessageDto(m.Role.Value, m.Text)).ToArray(), JsonOptions);
+        JsonSerializer.Serialize(messages.Select(ToDto).ToArray(), JsonOptions);
 
     private static IReadOnlyList<ChatMessage> DeserializeMessages(string json)
     {
         var dtos = JsonSerializer.Deserialize<MessageDto[]>(json, JsonOptions) ?? Array.Empty<MessageDto>();
-        return dtos.Select(d => new ChatMessage(new ChatRole(d.Role), d.Text)).ToArray();
+        return dtos.Select(FromDto).ToArray();
+    }
+
+    // Preserve the message's CONTENT kinds (text, tool call, tool result), not just its text — a
+    // checkpoint exists to resume an agentic loop, so dropping tool-call/result history (which carry
+    // no TextContent, hence empty m.Text) would make a resumed agent forget what it called and saw.
+    private static MessageDto ToDto(ChatMessage message)
+    {
+        var contents = new List<ContentDto>();
+        foreach (var content in message.Contents)
+        {
+            switch (content)
+            {
+                case TextContent text:
+                    contents.Add(new ContentDto("text", Text: text.Text));
+                    break;
+                case FunctionCallContent call:
+                    contents.Add(new ContentDto("call", CallId: call.CallId, Name: call.Name,
+                        Arguments: call.Arguments is null ? null : new Dictionary<string, object?>(call.Arguments)));
+                    break;
+                case FunctionResultContent result:
+                    contents.Add(new ContentDto("result", CallId: result.CallId, Result: result.Result?.ToString()));
+                    break;
+            }
+        }
+        // Fallback: a message with only unrecognized content but a non-empty text projection keeps its text.
+        if (contents.Count == 0 && !string.IsNullOrEmpty(message.Text))
+        {
+            contents.Add(new ContentDto("text", Text: message.Text));
+        }
+        return new MessageDto(message.Role.Value, contents);
+    }
+
+    private static ChatMessage FromDto(MessageDto dto)
+    {
+        var contents = new List<AIContent>();
+        foreach (var content in dto.Contents)
+        {
+            switch (content.Kind)
+            {
+                case "text":
+                    contents.Add(new TextContent(content.Text ?? string.Empty));
+                    break;
+                case "call":
+                    contents.Add(new FunctionCallContent(content.CallId ?? string.Empty, content.Name ?? string.Empty, content.Arguments));
+                    break;
+                case "result":
+                    contents.Add(new FunctionResultContent(content.CallId ?? string.Empty, content.Result));
+                    break;
+            }
+        }
+        return new ChatMessage(new ChatRole(dto.Role), contents);
     }
 
     private static string? SerializeMetadata(IReadOnlyDictionary<string, string>? metadata) =>
@@ -145,5 +196,13 @@ public sealed class PostgresCheckpointStore : ICheckpointStore, IAsyncDisposable
 
     public ValueTask DisposeAsync() => _dataSource.DisposeAsync();
 
-    private sealed record MessageDto(string Role, string Text);
+    private sealed record MessageDto(string Role, List<ContentDto> Contents);
+
+    private sealed record ContentDto(
+        string Kind,                                    // "text" | "call" | "result"
+        string? Text = null,                            // text
+        string? CallId = null,                          // call, result
+        string? Name = null,                            // call
+        Dictionary<string, object?>? Arguments = null,  // call
+        string? Result = null);                         // result
 }

@@ -81,6 +81,40 @@ public abstract class CheckpointStoreContractTests
     }
 
     [SkippableFact]
+    public async Task RoundTrips_ToolCallAndResultContent()
+    {
+        // A checkpoint resumes an agentic loop, so tool-call/result history must survive the round
+        // trip — not just message text. (The Postgres store serializes content kinds; this proves it.)
+        var store = await CreateStoreAsync();
+        var thread = Guid.NewGuid().ToString();
+        var messages = new List<ChatMessage>
+        {
+            new(ChatRole.User, "delete my account"),
+            new(ChatRole.Assistant, new List<AIContent>
+            {
+                new FunctionCallContent("call-1", "delete_account", new Dictionary<string, object?> { ["confirm"] = true }),
+            }),
+            new(ChatRole.Tool, new List<AIContent> { new FunctionResultContent("call-1", "deleted") }),
+        };
+        await store.SaveAsync(new Checkpoint(Id(thread, 1), thread, messages, 2, DateTimeOffset.UtcNow));
+
+        var latest = await store.LoadLatestAsync(thread);
+
+        Assert.NotNull(latest);
+        Assert.Equal(3, latest!.Messages.Count);
+        Assert.Equal("delete my account", latest.Messages[0].Text);
+
+        var call = latest.Messages[1].Contents.OfType<FunctionCallContent>().Single();
+        Assert.Equal("delete_account", call.Name);
+        Assert.Equal("call-1", call.CallId);
+        Assert.True(call.Arguments!.ContainsKey("confirm"));
+
+        var result = latest.Messages[2].Contents.OfType<FunctionResultContent>().Single();
+        Assert.Equal("call-1", result.CallId);
+        Assert.Equal("deleted", result.Result?.ToString());
+    }
+
+    [SkippableFact]
     public async Task LoadLatest_UnknownThread_ReturnsNull()
     {
         var store = await CreateStoreAsync();
