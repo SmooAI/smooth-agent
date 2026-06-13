@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
 using SmooAI.SmoothOperator.Core;
@@ -68,8 +69,13 @@ public sealed class TurnRunner
         // 3. Persist the inbound user message.
         await _store.AppendMessageAsync(conversationId, MessageDirection.Inbound, userMessage, cancellationToken).ConfigureAwait(false);
 
-        // 4. Stream the turn, emitting a stream_token per delta.
+        // 4. Stream the turn: a stream_token per text delta, and a stream_chunk per tool call /
+        //    tool result (mirrors the Rust runner translating ToolCallStart/Complete events). Tool
+        //    calls are deduped by callId (streaming can fragment them); results are labeled by
+        //    looking the tool name back up from the call.
         var reply = new StringBuilder();
+        var toolNames = new Dictionary<string, string>();
+        var emittedCalls = new HashSet<string>();
         await foreach (var update in agent.RunStreamingAsync(userMessage, thread, cancellationToken).ConfigureAwait(false))
         {
             var text = update.Text;
@@ -77,6 +83,21 @@ public sealed class TurnRunner
             {
                 reply.Append(text);
                 sink(ProtocolEvents.StreamToken(requestId, text));
+            }
+
+            foreach (var content in update.Contents)
+            {
+                switch (content)
+                {
+                    case FunctionCallContent call when emittedCalls.Add(call.CallId):
+                        toolNames[call.CallId] = call.Name;
+                        sink(ProtocolEvents.StreamChunk(requestId, call.Name, ToolCallState(call)));
+                        break;
+                    case FunctionResultContent result:
+                        var name = toolNames.TryGetValue(result.CallId, out var resolved) ? resolved : "tool";
+                        sink(ProtocolEvents.StreamChunk(requestId, name, ToolResultState(name, result)));
+                        break;
+                }
             }
         }
 
@@ -86,4 +107,31 @@ public sealed class TurnRunner
     }
 
     private static string Truncate(string value, int max) => value.Length <= max ? value : value[..max];
+
+    private static JsonObject ToolCallState(FunctionCallContent call) => new()
+    {
+        ["rawResponse"] = new JsonObject
+        {
+            ["toolCall"] = new JsonObject
+            {
+                ["name"] = call.Name,
+                ["arguments"] = call.Arguments is null ? new JsonObject() : JsonSerializer.SerializeToNode(call.Arguments),
+            },
+        },
+    };
+
+    private static JsonObject ToolResultState(string name, FunctionResultContent result)
+    {
+        var resultText = result.Result?.ToString() ?? string.Empty;
+        // The engine folds tool failures into the result string (see InvokeToolAsync); detect that
+        // convention so the chunk's isError flag matches the Rust ToolCallComplete signal.
+        var isError = resultText.StartsWith("Error:", StringComparison.Ordinal) || resultText.StartsWith("Denied by human:", StringComparison.Ordinal);
+        return new JsonObject
+        {
+            ["rawResponse"] = new JsonObject
+            {
+                ["toolResult"] = new JsonObject { ["name"] = name, ["isError"] = isError, ["result"] = resultText },
+            },
+        };
+    }
 }

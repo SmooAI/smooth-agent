@@ -18,6 +18,15 @@ internal sealed class MockChatClient : IChatClient
         return this;
     }
 
+    public MockChatClient PushToolCall(string callId, string name, IDictionary<string, object?> arguments)
+    {
+        _responses.Enqueue(new ChatResponse(new ChatMessage(ChatRole.Assistant, new List<AIContent> { new FunctionCallContent(callId, name, arguments) }))
+        {
+            ModelId = "mock-model",
+        });
+        return this;
+    }
+
     private ChatResponse Next() =>
         _responses.Count > 0 ? _responses.Dequeue() : new ChatResponse(new ChatMessage(ChatRole.Assistant, string.Empty));
 

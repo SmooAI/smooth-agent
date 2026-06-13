@@ -138,6 +138,10 @@ public sealed class SmoothAgent
             var toolMessage = await ExecuteToolsAsync(calls, cancellationToken).ConfigureAwait(false);
             working.Add(toolMessage);
             newThisTurn.Add(toolMessage);
+            // Surface the tool results into the stream (mirrors the Rust engine emitting a
+            // ToolCallComplete event) so consumers can render tool-result chunks. The model's
+            // tool-call request already flowed through the raw updates above.
+            yield return new ChatResponseUpdate(toolMessage.Role, toolMessage.Contents);
             await MaybeCheckpointAsync(thread, newThisTurn, iterations, CheckpointStrategy.AfterToolCall, cancellationToken).ConfigureAwait(false);
         }
 

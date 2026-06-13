@@ -238,6 +238,54 @@ public class WebSocketProtocolIntegrationTests
     }
 
     [Fact]
+    public async Task ToolCall_EmitsToolCallAndResultChunks_OverWebSocket()
+    {
+        // Iteration 1: the model requests a tool. The engine executes it (no tool is registered, so
+        // the result is an "unknown tool" error — which still exercises the full chunk lifecycle),
+        // feeds the result back, and iteration 2 answers. The runner must emit a stream_chunk for
+        // the tool CALL and one for the tool RESULT (the C# parity of the Rust ToolCallStart/Complete).
+        var chat = new MockChatClient()
+            .PushToolCall("call-1", "lookup_policy", new Dictionary<string, object?> { ["topic"] = "returns" })
+            .PushText("Our return window is 30 days.");
+        await using var app = BuildApp(chat);
+        await app.StartAsync();
+        using var socket = await ConnectAsync(app.GetTestServer());
+
+        await SendAsync(socket, """{"action":"create_conversation_session","requestId":"cs"}""");
+        var sessionId = (await ReceiveAsync(socket))["data"]!["sessionId"]!.GetValue<string>();
+
+        await SendAsync(socket, $$"""{"action":"send_message","requestId":"sm","sessionId":"{{sessionId}}","message":"how long to return?"}""");
+
+        var chunks = new List<JsonObject>();
+        var sawToken = false;
+        JsonObject ev;
+        do
+        {
+            ev = await ReceiveAsync(socket);
+            var type = ev["type"]!.GetValue<string>();
+            if (type == "stream_chunk")
+            {
+                chunks.Add(ev);
+            }
+            else if (type == "stream_token")
+            {
+                sawToken = true;
+            }
+        }
+        while (ev["type"]!.GetValue<string>() != "eventual_response");
+
+        // A tool-call chunk (node = tool name, state.rawResponse.toolCall) and a tool-result chunk.
+        Assert.Contains(chunks, c => c["data"]!["state"]!["rawResponse"]?["toolCall"]?["name"]?.GetValue<string>() == "lookup_policy");
+        var resultChunk = chunks.FirstOrDefault(c => c["data"]!["state"]!["rawResponse"]?["toolResult"] is not null);
+        Assert.NotNull(resultChunk);
+        Assert.Equal("lookup_policy", resultChunk!["node"]!.GetValue<string>());
+        Assert.True(sawToken, "expected the final answer to stream after the tool result");
+
+        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
+        await app.StopAsync();
+    }
+
+    [Fact]
     public async Task UnknownAction_ErrorsWithoutDroppingConnection()
     {
         await using var app = BuildApp(new MockChatClient());

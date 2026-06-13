@@ -203,8 +203,17 @@ client's `ProtocolValidator`).
   handler) + `RerankSelection` mirroring the Rust `build_reranker` (off→none, gateway+key→gateway,
   gateway-no-key→lexical fallback, never an unauth call). Wired `TurnRunner` (fetch a wider candidate
   pool, rerank down to top-K) → `FrameDispatcher` → AspNetCore DI → host config, proven by a
-  real-WebSocket integration test (a reversing reranker visibly reorders the citation path). *Still
-  open here:* tool/HITL `stream_chunk`s.
+  real-WebSocket integration test (a reversing reranker visibly reorders the citation path).
+- **Server Phase 5 — tool `stream_chunk`s** *(shipped)*: the runner now emits a `stream_chunk` per
+  tool **call** (`state.rawResponse.toolCall` = name + arguments) and per tool **result**
+  (`state.rawResponse.toolResult` = name + isError + result), mirroring the Rust runner translating
+  `ToolCallStart`/`ToolCallComplete` events. The engine's `RunStreamingAsync` now yields the
+  tool-result update (so results surface in the stream, not just the model's call request); the
+  runner dedupes calls by `callId` (streaming can fragment them) and labels result chunks by looking
+  the name back up from the call. Proven by a real-WebSocket integration test (a model tool call →
+  toolCall chunk → toolResult chunk → streamed answer). *Still open here:* surfacing the HITL
+  approval gate as a protocol chunk (the engine's human-gate exists; exposing it over the wire is
+  the next step).
 - **Server Phase 5 — `/admin/*` API** *(shipped)*: the auth-gated admin HTTP API (C# analog of the
   Rust `/admin` router). `MapSmoothOperatorAdmin()` mounts `/admin/health` (ungated liveness),
   `/admin/me` (whoami), `/admin/connectors` (the configured repos), and `POST /admin/reindex`
