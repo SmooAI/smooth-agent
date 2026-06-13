@@ -49,7 +49,18 @@ public sealed class TurnRunner
         {
             var fetchLimit = _reranker is not null ? RerankCandidatePool : AutoContextLimit;
             var candidates = await _knowledge.QueryAsync(userMessage, fetchLimit, cancellationToken).ConfigureAwait(false);
-            var hits = await Rerankers.ApplyOptionalAsync(_reranker, userMessage, candidates, AutoContextLimit, cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<KnowledgeResult> hits;
+            try
+            {
+                hits = await Rerankers.ApplyOptionalAsync(_reranker, userMessage, candidates, AutoContextLimit, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // The reranker is an opt-in retrieval-QUALITY stage (the GatewayReranker hits the
+                // network) — a transient failure there must not deny the user an answer. Fall back
+                // to the upstream retrieval order, truncated. Cancellation still propagates.
+                hits = candidates.Take(AutoContextLimit).ToArray();
+            }
             foreach (var hit in hits)
             {
                 var url = hit.Source.StartsWith("http://", StringComparison.Ordinal) || hit.Source.StartsWith("https://", StringComparison.Ordinal) ? hit.Source : null;

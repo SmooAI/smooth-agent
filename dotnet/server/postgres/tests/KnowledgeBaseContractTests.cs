@@ -36,7 +36,7 @@ public abstract class KnowledgeBaseContractTests
 
         Assert.Contains(hits, h => h.DocumentId == "doc-x" && h.Chunk.Contains("wombats"));
         // Not duplicated — a single row per id.
-        Assert.Single(hits.Where(h => h.DocumentId == "doc-x"));
+        Assert.Single(hits, h => h.DocumentId == "doc-x");
     }
 }
 

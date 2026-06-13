@@ -108,6 +108,30 @@ public class WebSocketProtocolIntegrationTests
     }
 
     [Fact]
+    public async Task Reranker_Failure_DoesNotBreakTurn_StillGrounds_OverWebSocket()
+    {
+        // A reranker is opt-in and network-backed (GatewayReranker); if it throws, the turn must
+        // still complete with citations from the upstream retrieval order — not deny the user an answer.
+        var kb = new AclKnowledgeStore();
+        await kb.IngestAsync(new KnowledgeDocument("a", "Refund policy details for orders.", "a.md"), DocumentAcl.PublicAcl);
+
+        await using var app = BuildAppWithReranker(new MockChatClient().PushText("ok"), kb, new ThrowingReranker());
+        await app.StartAsync();
+
+        var sources = await CitationSourcesAsync(app.GetTestServer(), token: null, "policy");
+
+        Assert.Contains("a.md", sources); // grounded despite the reranker throwing
+        await app.StopAsync();
+    }
+
+    /// <summary>A reranker that always throws — stands in for a gateway/network failure.</summary>
+    private sealed class ThrowingReranker : IReranker
+    {
+        public Task<IReadOnlyList<KnowledgeResult>> RerankAsync(string query, IReadOnlyList<KnowledgeResult> candidates, int topK, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("gateway rerank unavailable");
+    }
+
+    [Fact]
     public async Task Acl_PrivateDoc_OnlyReachesEntitledUser_OverWebSocket()
     {
         var kb = new AclKnowledgeStore();
